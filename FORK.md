@@ -43,7 +43,7 @@ Rules that keep merges cheap:
 5. Run upstream tests plus the local smoke test before tagging.
 6. Merge upstream monthly; merge security fixes immediately.
 
-## Current patch set (first slice)
+## Current patch set
 
 1. **Generic `local` OSS provider**
    - `codex-rs/model-provider-info/src/lib.rs`: `LOCAL_OSS_PROVIDER_ID`,
@@ -53,39 +53,68 @@ Rules that keep merges cheap:
    - No Ollama/LM Studio readiness checks or model pulling.
 2. **Config validation**
    - `local` accepted as an OSS provider.
-3. **`clx` launcher**
-   - `scripts/clx`: picks a model from `/v1/models`, passes
-     `--oss --local-provider local`, forwards all other Codex flags.
+3. **Native `clx` binary** (`codex-rs/clx`)
+   - Owns `CLX_HOME` (default `~/.clx`) so local sessions do not inherit
+     ChatGPT plugins/MCP servers from `~/.codex`.
+   - Queries `GET /v1/models`, reads `max_model_len` (or `context_length`) and
+     writes a model catalog.
+   - Generates `~/.clx/config.toml` and launches the fork's `codex` with
+     `--oss --local-provider local`.
+   - Optional `~/.clx/clx.toml` for `base_url` / `model` defaults.
 4. **Help text** for `--local-provider`.
 
 Build/check while iterating:
 
 ```bash
 cd codex-rs
-cargo check -p codex-model-provider-info
-cargo test -p codex-model-provider-info
+cargo build -p clx --bin clx
+cargo build -p codex-cli --bin codex
+cargo test -p codex-model-provider-info -p clx
 ```
 
-Run:
+Run (from `codex-rs`):
 
 ```bash
-CLX_BASE_URL=http://192.168.50.219:8015/v1 ./scripts/clx --model DeepSeek-V4.1-Flash-TP4
-CLX_BASE_URL=http://192.168.50.219:8015/v1 ./scripts/clx models
+CLX_BASE_URL=http://192.168.50.219:8015/v1 ./target/debug/clx --model DeepSeek-V4.1-Flash-TP4
+CLX_BASE_URL=http://192.168.50.219:8015/v1 ./target/debug/clx models
+```
+
+Or persist defaults in `~/.clx/clx.toml`:
+
+```toml
+base_url = "http://192.168.50.219:8015/v1"
+model = "DeepSeek-V4.1-Flash-TP4"
+```
+
+## Install (local build)
+
+```bash
+cd codex-rs
+cargo build --release -p clx --bin clx
+cargo build --release -p codex-cli --bin codex
+
+mkdir -p ~/.local/bin ~/.local/lib/clx
+install -m 755 target/release/clx ~/.local/bin/clx
+install -m 755 target/release/codex ~/.local/lib/clx/codex
+```
+
+`clx` looks for the fork binary at `~/.local/lib/clx/codex` (or
+`$CLX_CODEX_BIN`). A minimal `~/.clx/clx.toml`:
+
+```toml
+base_url = "http://127.0.0.1:8000/v1"
+model = "DeepSeek-V4.1-Flash-TP4"
 ```
 
 ## Roadmap
 
-- Native `clx` binary in the workspace (not a wrapper script).
-- Query `/v1/models` at startup, build a profile-scoped catalog with
-  `max_model_len`, and expose a model picker.
-- Dedicated `CLX_HOME` (default `~/.clx`) so the local profile does not inherit
-  ChatGPT plugins/MCP servers from `~/.codex`.
+- Multi-endpoint config (vllm, flare, etc.) and an interactive model picker.
 - Per-backend reasoning adapters (`reasoning`, `reasoning_content`,
   `reasoning_text`) and Responses↔Chat-Completions fallback.
 - Optional embedded reasoning-summary bridge for `exec --json` consumers.
-- Local-only config defaults: no auth, no telemetry/update paths, no cloud model
-  catalog.
-- Packaging: `clx` release binaries for macOS/Linux.
+- Local-only config defaults: verify no auth/telemetry/update surfaces remain.
+- Packaging: `clx` release binaries for macOS/Linux; install layout
+  `~/.local/bin/clx` + `~/.local/lib/clx/codex`.
 
 ## License
 
