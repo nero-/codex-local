@@ -379,7 +379,10 @@ fn build_config(model: &str, context: u64, catalog_path: &Path) -> String {
          show_raw_agent_reasoning = true\n\
          hide_agent_reasoning = false\n\
          check_for_update_on_startup = false\n\
-         model_catalog_json = {catalog}\n",
+         model_catalog_json = {catalog}\n\
+         \n\
+         [features]\n\
+         daemon_auto_start = false\n",
         model = toml_string(model),
         catalog = toml_string(&catalog_path.display().to_string()),
     )

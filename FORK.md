@@ -125,7 +125,14 @@ name = "local"
 base_url = "http://127.0.0.1:8000/v1"
 wire_api = "responses"
 requires_openai_auth = false
+
+[features]
+daemon_auto_start = false
 ```
+
+Disabling `daemon_auto_start` is important: the TUI's `/model` list comes from
+the managed app-server daemon, which can keep a stale GPT catalog. Embedded mode
+uses `model_catalog_json` directly.
 
 `clx` is the generic entry point: it reads `~/.clx/clx.toml`, queries
 `/v1/models`, rewrites the catalog, and launches the fork. A minimal config:
