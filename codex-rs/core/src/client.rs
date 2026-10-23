@@ -194,6 +194,24 @@ fn session_telemetry_for_request(
     )
 }
 
+/// Local providers backed by vLLM reject `minimal`/`medium`, but Codex should
+/// still expose every effort level in the UI. Map the unsupported wire values
+/// to the nearest supported value before sending the request.
+fn normalize_local_reasoning_effort(
+    provider: &ModelProviderInfo,
+    effort: ReasoningEffortConfig,
+) -> ReasoningEffortConfig {
+    if provider.name.to_ascii_lowercase().starts_with("local") {
+        match effort {
+            ReasoningEffortConfig::Minimal => ReasoningEffortConfig::Low,
+            ReasoningEffortConfig::Medium => ReasoningEffortConfig::High,
+            other => other,
+        }
+    } else {
+        effort
+    }
+}
+
 /// Session-scoped state shared by all [`ModelClient`] clones.
 ///
 /// This is intentionally kept minimal so `ModelClient` does not need to hold a full `Config`. Most
@@ -940,7 +958,8 @@ impl ModelClient {
         Reasoning {
             effort: effort
                 .or_else(|| model_info.default_reasoning_level.clone())
-                .map(|effort| model_info.resolve_reasoning_effort(effort)),
+                .map(|effort| model_info.resolve_reasoning_effort(effort))
+                .map(|effort| normalize_local_reasoning_effort(self.state.provider.info(), effort)),
             summary: (model_info.supports_reasoning_summary_parameter
                 && summary != ReasoningSummaryConfig::None)
                 .then_some(summary),

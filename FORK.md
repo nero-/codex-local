@@ -62,6 +62,10 @@ Rules that keep merges cheap:
      `--oss --local-provider local`.
    - Optional `~/.clx/clx.toml` for `base_url` / `model` defaults.
 4. **Help text** for `--local-provider`.
+5. **Effort normalization for local providers**
+   - Catalog exposes `none` (off), `low`, `medium`, `high`, `xhigh`, `max`.
+   - vLLM rejects `minimal`/`medium`, so the client maps `minimal -> low` and
+     `medium -> high` on the wire while keeping the selected label.
 
 Build/check while iterating:
 
@@ -117,7 +121,7 @@ check_for_update_on_startup = false
 model_catalog_json = "/Users/you/.codex/model-catalog.json"
 
 [model_providers.local-default]
-name = "Local (clx)"
+name = "local"
 base_url = "http://127.0.0.1:8000/v1"
 wire_api = "responses"
 requires_openai_auth = false

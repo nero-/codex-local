@@ -317,9 +317,12 @@ fn build_catalog(models: &[ModelInfo], base_url: &str) -> serde_json::Value {
                 "description": format!("Local model served by clx at {base_url}"),
                 "default_reasoning_level": DEFAULT_REASONING_EFFORT,
                 "supported_reasoning_levels": [
+                    {"effort": "none", "description": "Off — no reasoning"},
                     {"effort": "low", "description": "Fast responses with lighter reasoning"},
+                    {"effort": "medium", "description": "Balanced reasoning (sent as high on this backend)"},
                     {"effort": "high", "description": "Greater reasoning depth"},
                     {"effort": "xhigh", "description": "Extra high reasoning depth"},
+                    {"effort": "max", "description": "Maximum reasoning depth"},
                 ],
                 "shell_type": "unified_exec",
                 "visibility": "list",
