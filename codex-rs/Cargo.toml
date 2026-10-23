@@ -36,7 +36,6 @@ members = [
     "cloud-tasks-client",
     "cloud-tasks-mock-client",
     "cli",
-    "clx",
     "collaboration-mode-templates",
     "connectors",
     "config",

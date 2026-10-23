@@ -655,7 +655,7 @@ pub const DEFAULT_OLLAMA_PORT: u16 = 11434;
 
 pub const LMSTUDIO_OSS_PROVIDER_ID: &str = "lmstudio";
 pub const OLLAMA_OSS_PROVIDER_ID: &str = "ollama";
-/// Generic local Responses-API provider used by the `clx` fork.
+/// Generic local Responses-API provider used by the codex-local fork.
 ///
 /// Unlike the Ollama and LM Studio providers it performs no backend-specific
 /// setup or model pulling; it just points Codex at an OpenAI-compatible
