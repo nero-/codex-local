@@ -75,6 +75,21 @@ fn main() {
 }
 
 fn run() -> Result<()> {
+    // `--help`/`--version` must work before touching CLX_HOME.
+    if let Some(first) = env::args_os().nth(1) {
+        match first.to_string_lossy().as_ref() {
+            "-h" | "--help" => {
+                print_help();
+                return Ok(());
+            }
+            "-V" | "--version" => {
+                println!("clx {}", env!("CARGO_PKG_VERSION"));
+                return Ok(());
+            }
+            _ => {}
+        }
+    }
+
     let home = clx_home()?;
     fs::create_dir_all(&home).with_context(|| format!("create {}", home.display()))?;
     let settings = load_settings(&home)?;

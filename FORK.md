@@ -86,25 +86,53 @@ base_url = "http://192.168.50.219:8015/v1"
 model = "DeepSeek-V4.1-Flash-TP4"
 ```
 
-## Install (local build)
+## Install into `~/.codex`
+
+This replaces the normal `codex` binary so tools that look for Codex find the
+fork. Back up the config first; keep the old binary if you want a rollback.
 
 ```bash
 cd codex-rs
 cargo build --release -p clx --bin clx
 cargo build --release -p codex-cli --bin codex
 
-mkdir -p ~/.local/bin ~/.local/lib/clx
 install -m 755 target/release/clx ~/.local/bin/clx
-install -m 755 target/release/codex ~/.local/lib/clx/codex
+CODEX_BIN="$(readlink -f ~/.local/bin/codex)"
+cp -p ~/.codex/config.toml ~/.codex/config.toml.chatgpt-backup-$(date +%Y%m%d-%H%M%S)
+install -m 755 target/release/codex "$CODEX_BIN"
 ```
 
-`clx` looks for the fork binary at `~/.local/lib/clx/codex` (or
-`$CLX_CODEX_BIN`). A minimal `~/.clx/clx.toml`:
+Point plain `codex` at the local provider by adding these top-level keys to
+`~/.codex/config.toml` (the `clx`-generated catalog supplies model metadata):
+
+```toml
+model = "DeepSeek-V4.1-Flash-TP4"
+model_provider = "local-default"
+model_context_window = 1048576
+model_auto_compact_token_limit = 943718
+model_reasoning_effort = "high"
+model_reasoning_summary = "detailed"
+show_raw_agent_reasoning = true
+check_for_update_on_startup = false
+model_catalog_json = "/Users/you/.codex/model-catalog.json"
+
+[model_providers.local-default]
+name = "Local (clx)"
+base_url = "http://127.0.0.1:8000/v1"
+wire_api = "responses"
+requires_openai_auth = false
+```
+
+`clx` is the generic entry point: it reads `~/.clx/clx.toml`, queries
+`/v1/models`, rewrites the catalog, and launches the fork. A minimal config:
 
 ```toml
 base_url = "http://127.0.0.1:8000/v1"
 model = "DeepSeek-V4.1-Flash-TP4"
 ```
+
+If the fork binary is not next to `clx` (or in `~/.local/lib/clx/codex`), set
+`CLX_CODEX_BIN` to its path.
 
 ## Roadmap
 
@@ -114,7 +142,7 @@ model = "DeepSeek-V4.1-Flash-TP4"
 - Optional embedded reasoning-summary bridge for `exec --json` consumers.
 - Local-only config defaults: verify no auth/telemetry/update surfaces remain.
 - Packaging: `clx` release binaries for macOS/Linux; install layout
-  `~/.local/bin/clx` + `~/.local/lib/clx/codex`.
+  `~/.local/bin/clx` + the fork binary at the normal `codex` path.
 
 ## License
 
