@@ -59,6 +59,11 @@ Rules that keep merges cheap:
    - `features.daemon_auto_start = false` in the local config so the TUI's
      `/model` list is served by the embedded app-server and the local catalog,
      not a stale managed daemon.
+5. **Native model discovery**
+   - `codex models refresh` queries the configured local provider's
+     `GET /v1/models`, reads `max_model_len`/`context_length`, and rewrites the
+     model catalog.
+   - `codex models list` prints the current catalog.
 
 Build/check while iterating:
 
@@ -88,8 +93,6 @@ Point plain `codex` at the local provider by adding these top-level keys to
 ```toml
 model = "DeepSeek-V4.1-Flash-TP4"
 model_provider = "local-default"
-model_context_window = 1048576
-model_auto_compact_token_limit = 943718
 model_reasoning_effort = "high"
 model_reasoning_summary = "detailed"
 show_raw_agent_reasoning = true
@@ -112,8 +115,7 @@ managed app-server daemon, which can keep a stale GPT catalog.
 
 ## Roadmap
 
-- Fold `/v1/models` discovery into a `codex` subcommand and regenerate the local
-  catalog without a separate launcher.
+- Auto-refresh the catalog when the local endpoint's model list changes.
 - Multi-endpoint config (vllm, flare, etc.).
 - Per-backend reasoning adapters (`reasoning`, `reasoning_content`,
   `reasoning_text`) and Responses↔Chat-Completions fallback.
