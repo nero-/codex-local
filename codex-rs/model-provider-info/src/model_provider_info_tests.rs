@@ -475,6 +475,24 @@ fn test_built_in_model_providers_include_amazon_bedrock_endpoints() {
 }
 
 #[test]
+fn test_built_in_model_providers_include_generic_local_provider() {
+    let providers = built_in_model_providers(/*openai_base_url*/ None);
+    let local = providers
+        .get(LOCAL_OSS_PROVIDER_ID)
+        .expect("generic local provider should be built in");
+
+    assert_eq!(local.name, "local");
+    assert_eq!(local.wire_api, WireApi::Responses);
+    assert!(!local.requires_openai_auth);
+    assert!(
+        local
+            .base_url
+            .as_deref()
+            .is_some_and(|url| !url.trim().is_empty())
+    );
+}
+
+#[test]
 fn test_built_in_model_providers_include_amazon_bedrock_runtime() {
     let providers = built_in_model_providers(/*openai_base_url*/ None);
     let runtime = providers

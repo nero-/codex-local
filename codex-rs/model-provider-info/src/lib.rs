@@ -655,6 +655,34 @@ pub const DEFAULT_OLLAMA_PORT: u16 = 11434;
 
 pub const LMSTUDIO_OSS_PROVIDER_ID: &str = "lmstudio";
 pub const OLLAMA_OSS_PROVIDER_ID: &str = "ollama";
+/// Generic local Responses-API provider used by the `clx` fork.
+///
+/// Unlike the Ollama and LM Studio providers it performs no backend-specific
+/// setup or model pulling; it just points Codex at an OpenAI-compatible
+/// Responses endpoint.
+pub const LOCAL_OSS_PROVIDER_ID: &str = "local";
+pub const LOCAL_OSS_DEFAULT_BASE_URL: &str = "http://127.0.0.1:8000/v1";
+
+/// Create the generic local OSS provider.
+///
+/// Base URL precedence:
+/// 1. `CLX_BASE_URL`
+/// 2. `CODEX_LOCAL_BASE_URL`
+/// 3. `CODEX_OSS_BASE_URL`
+/// 4. `http://127.0.0.1:8000/v1`
+pub fn create_local_oss_provider() -> ModelProviderInfo {
+    let base_url = std::env::var("CLX_BASE_URL")
+        .or_else(|_| std::env::var("CODEX_LOCAL_BASE_URL"))
+        .or_else(|_| std::env::var("CODEX_OSS_BASE_URL"))
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| LOCAL_OSS_DEFAULT_BASE_URL.to_string());
+
+    let mut provider = create_oss_provider_with_base_url(&base_url, WireApi::Responses);
+    provider.name = "local".to_string();
+    provider
+}
 
 /// Built-in default provider list.
 pub fn built_in_model_providers(
@@ -685,6 +713,7 @@ pub fn built_in_model_providers(
             LMSTUDIO_OSS_PROVIDER_ID,
             create_oss_provider(DEFAULT_LMSTUDIO_PORT, WireApi::Responses),
         ),
+        (LOCAL_OSS_PROVIDER_ID, create_local_oss_provider()),
     ]
     .into_iter()
     .map(|(k, v)| (k.to_string(), v))
