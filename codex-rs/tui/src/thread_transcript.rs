@@ -1,5 +1,5 @@
 //! Project persisted items into the same rich cells as completed live output.
-//! Tool grouping spans hidden reasoning but stops at visible content and turn boundaries.
+//! Tool grouping stops at visible reasoning, other content, and turn boundaries.
 //! Only one computer or exploration group can be pending at a time.
 
 use std::sync::Arc;
@@ -134,22 +134,6 @@ pub(crate) fn thread_items_to_transcript_cells(
     let mut cells: TranscriptCells = Vec::new();
     let mut pending = None;
     for item in items {
-        if matches!(item, ThreadItem::Reasoning { .. })
-            && let Some(group) = &mut pending
-        {
-            for cell in item_to_cells(
-                item,
-                cwd,
-                raw_reasoning_visibility,
-                inline_visualization_context.clone(),
-            ) {
-                match group {
-                    PendingActivity::Computer(group) => group.group.push_detail(cell),
-                    PendingActivity::Exploration(group) => group.group.push_detail(cell),
-                }
-            }
-            continue;
-        }
         if let Some(cell) = tools::historical_tool_fallback(&item) {
             PendingActivity::flush(&mut pending, &mut cells);
             cells.push(Arc::new(cell));
@@ -323,7 +307,7 @@ fn item_to_cells(
                     header,
                     text,
                     cwd.as_path(),
-                    /*transcript_only*/ true,
+                    /*transcript_only*/ false,
                 );
                 cell.set_source_item_id(id);
                 cells.push(Arc::new(cell));

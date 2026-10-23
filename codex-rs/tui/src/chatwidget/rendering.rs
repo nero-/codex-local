@@ -291,6 +291,12 @@ impl ChatWidget {
                     .map(AsRef::as_ref),
             )
             .chain(
+                self.deferred_reasoning_blocks
+                    .iter()
+                    .map(Box::as_ref)
+                    .map(|cell| cell as &dyn HistoryCell),
+            )
+            .chain(
                 self.pending_rate_limit_reset_hint()
                     .map(|cell| cell as &dyn HistoryCell),
             );

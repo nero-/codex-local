@@ -12,7 +12,8 @@ product and remove OpenAI/Codex branding.
 - `codex` is the only entry point: no ChatGPT login, no cloud model picker.
 - Any OpenAI-compatible **Responses API** endpoint works (vLLM, Flare, etc.).
 - A local model catalog supplies the model picker and context window.
-- Raw reasoning is visible by default.
+- Reasoning appears in chat as a compact block that expands to richly rendered
+  Markdown on demand; raw reasoning remains available by default.
 - Plugins/extensions/MCP/skills stay configurable without fighting upstream.
 - Desktop app is out of scope; DeepSeek Harness covers that surface.
 
@@ -64,6 +65,16 @@ Rules that keep merges cheap:
      `GET /v1/models`, reads `max_model_len`/`context_length`, and rewrites the
      model catalog.
    - `codex models list` prints the current catalog.
+6. **Inline reasoning disclosure**
+   - Reasoning is a first-class transcript cell instead of a footer-only status
+     update or a hidden child of a tool activity group.
+   - The default compact row shows `Reasoning · <latest useful heading>`.
+   - In the owned fullscreen transcript, focus the latest activity with `F4`
+     and press `Enter` to toggle it. Clicking `+ Show reasoning` also works.
+   - Expanded reasoning uses the normal Markdown renderer, preserving headings,
+     emphasis, lists, tables, fenced-code highlighting, math, and Mermaid.
+   - Reasoning received while a tool is still running is deferred and emitted
+     immediately after that tool cell to preserve chronology.
 
 Build/check while iterating:
 
@@ -98,6 +109,16 @@ model_reasoning_summary = "detailed"
 show_raw_agent_reasoning = true
 check_for_update_on_startup = false
 model_catalog_json = "/Users/you/.codex/model-catalog.json"
+
+[tui]
+fullscreen_transcript = true
+raw_output_mode = false
+
+[tui.rendering]
+mermaid = true
+math = true
+tables = true
+lists = true
 
 [model_providers.local-default]
 name = "local"

@@ -39,15 +39,10 @@ pub(super) fn activity_layout(
         (true, _) => "− Show less".to_owned(),
         (false, Some(ActivityDisclosure::OutputLines(count))) => {
             let noun = if count == 1 { "line" } else { "lines" };
-            let mut label = format!("+ {count} {noun}");
-            if let Some(shortcut) = shortcut {
-                let hint = format!(" ({} to expand)", shortcut.display_label());
-                let indent = usize::from(width / 4).min(/*other*/ 4);
-                if Line::from(format!("{label}{hint}")).width() + indent <= usize::from(width) {
-                    label.push_str(&hint);
-                }
-            }
-            label
+            disclosure_label(format!("+ {count} {noun}"), width, shortcut)
+        }
+        (false, Some(ActivityDisclosure::Reasoning)) => {
+            disclosure_label("+ Show reasoning".to_owned(), width, shortcut)
         }
         (false, Some(ActivityDisclosure::Generic) | None) => "+ Show details".to_owned(),
     };
@@ -55,6 +50,17 @@ pub(super) fn activity_layout(
         Some(offset) => layout.with_disclosure_control_at(label, offset),
         None => layout.with_disclosure_control(label),
     }
+}
+
+fn disclosure_label(mut label: String, width: u16, shortcut: Option<ShortcutHint>) -> String {
+    if let Some(shortcut) = shortcut {
+        let hint = format!(" ({} to expand)", shortcut.display_label());
+        let indent = usize::from(width / 4).min(/*other*/ 4);
+        if Line::from(format!("{label}{hint}")).width() + indent <= usize::from(width) {
+            label.push_str(&hint);
+        }
+    }
+    label
 }
 
 #[derive(Default)]

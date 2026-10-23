@@ -1,29 +1,64 @@
 ---
 source: tui/src/chatwidget/tests/computer_activity_tests.rs
-assertion_line: 116
+assertion_line: 124
 expression: "outputs[0]"
 ---
 Compact:
-• Used computer · 2 actions
-  ├ Inspect page 1
-  └ Inspect page 2
+• Used computer · 1 action
+  └ Inspect page 1
 
 Expanded:
 • Called cua_repl.js({"title":"Inspect page 1","code":"await cua.getState()"})
   └ Full output for 1
 
-• Inspecting action 1
-
-• Checking action 1
-• Called cua_repl.js({"title":"Inspect page 2","code":"await cua.getState()"})
-  └ Full output for 2
-
-• Inspecting action 2
-
-• Checking action 2
-
 Raw:
 • Called cua_repl.js({"title":"Inspect page 1","code":"await cua.getState()"})
   └ Full output for 1
+
+Compact:
+• Reasoning · Inspecting action 1
+
+Expanded:
+• Reasoning · Inspecting action 1
+
+Raw:
+Inspecting action 1
+
+Compact:
+• Reasoning · Checking action 1
+
+Expanded:
+• Reasoning · Checking action 1
+
+Raw:
+Checking action 1
+
+Compact:
+• Used computer · 1 action
+  └ Inspect page 2
+
+Expanded:
 • Called cua_repl.js({"title":"Inspect page 2","code":"await cua.getState()"})
   └ Full output for 2
+
+Raw:
+• Called cua_repl.js({"title":"Inspect page 2","code":"await cua.getState()"})
+  └ Full output for 2
+
+Compact:
+• Reasoning · Inspecting action 2
+
+Expanded:
+• Reasoning · Inspecting action 2
+
+Raw:
+Inspecting action 2
+
+Compact:
+• Reasoning · Checking action 2
+
+Expanded:
+• Reasoning · Checking action 2
+
+Raw:
+Checking action 2

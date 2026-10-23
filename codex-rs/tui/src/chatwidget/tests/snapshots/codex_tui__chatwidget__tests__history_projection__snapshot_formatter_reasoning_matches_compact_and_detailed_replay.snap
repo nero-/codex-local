@@ -1,16 +1,20 @@
 ---
 source: tui/src/chatwidget/tests/history_projection.rs
-assertion_line: 176
+assertion_line: 245
 expression: "snapshots.join(\"\\n\")"
 ---
 Hidden
-compact: []
+compact: [Line::from_iter([Span::from("• ").dim(), Span::from("Reasoning").bold(), Span::from(" · ").dim(), Span::from("Plan")]), Line::default(), Line::from_iter([Span::from("    "), Span::from("Read "), Span::from("src/main.rs"), Span::from(" ("), Span::from("src/main.rs:3").fg(Color::Reset).underlined(), Span::from(")"), Span::from(".")])]
 detailed:
-• Read src/main.rs (src/main.rs:3).
+• Reasoning · Plan
+
+    Read src/main.rs (src/main.rs:3).
 
 Visible
-compact: []
+compact: [Line::from_iter([Span::from("• ").dim(), Span::from("Reasoning").bold(), Span::from(" · ").dim(), Span::from("Plan")]), Line::default(), Line::from_iter([Span::from("    "), Span::from("Read "), Span::from("src/main.rs"), Span::from(" ("), Span::from("src/main.rs:3").fg(Color::Reset).underlined(), Span::from(")"), Span::from(".")]), Line::default(), Line::from_iter([Span::from("    "), Span::from("Raw detail.")])]
 detailed:
-• Read src/main.rs (src/main.rs:3).
-  
-  Raw detail.
+• Reasoning · Plan
+
+    Read src/main.rs (src/main.rs:3).
+
+    Raw detail.

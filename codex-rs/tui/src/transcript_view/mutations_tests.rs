@@ -356,9 +356,8 @@ fn absorbing_older_history_excludes_only_the_hydration_revision_from_new_activit
 }
 
 #[test]
-fn folding_a_reasoning_only_page_retains_its_find_and_copy_revision() {
+fn loading_before_a_reasoning_page_retains_its_find_and_copy_revision() {
     use crate::thread_transcript::RawReasoningVisibility;
-    use crate::thread_transcript::fold_trailing_activity_details;
     use crate::thread_transcript::thread_items_to_transcript_cells;
     use codex_app_server_protocol::ThreadItem;
     use codex_app_server_protocol::Turn;
@@ -432,11 +431,6 @@ fn folding_a_reasoning_only_page_retains_its_find_and_copy_revision() {
             project(&current.items[..1]).remove(/*index*/ 0),
         );
         view.history_loaded(&cells, 0..1);
-        let joined =
-            fold_trailing_activity_details(&cells[0], &cells[1..], std::slice::from_ref(&current))
-                .unwrap();
-        view.replace_group(&cells, 0..2, &joined);
-        cells.splice(0..2, [joined]);
         assert_eq!(render(&mut view, &cells, /*width*/ 30), before);
         render(&mut view, &cells, /*width*/ 16);
         assert_eq!(view.selected_text(&cells), copied);

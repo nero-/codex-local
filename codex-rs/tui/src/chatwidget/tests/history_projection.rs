@@ -204,11 +204,11 @@ async fn snapshot_formatter_reasoning_matches_compact_and_detailed_replay() {
         let replayed = take_history_cells(&mut rx);
         assert_eq!((projected.len(), replayed.len()), (1, 1));
         assert!(
-            projected[0]
+            !projected[0]
                 .display_hyperlink_lines(/*width*/ 80)
                 .is_empty()
         );
-        assert!(replayed[0].display_hyperlink_lines(/*width*/ 80).is_empty());
+        assert!(!replayed[0].display_hyperlink_lines(/*width*/ 80).is_empty());
         for width in [28, 80] {
             assert_eq!(
                 projected[0].transcript_hyperlink_lines(width),
@@ -259,8 +259,9 @@ fn raw_reasoning_keeps_its_own_heading() {
         /*config*/ None,
     );
     insta::assert_snapshot!(lines_to_single_string(&projected[0].transcript_lines(/*width*/ 80)), @"
-    • Raw investigation
-      Keep this heading and its details.
+    • Reasoning · Raw investigation
+
+        Keep this heading and its details.
     ");
 }
 

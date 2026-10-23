@@ -1,6 +1,7 @@
 //! Reasoning activity retains the latest usable line through empty items and status-row replacement.
 
 use super::*;
+use crate::terminal_hyperlinks::visible_lines;
 use pretty_assertions::assert_eq;
 
 fn delta(chat: &mut ChatWidget, id: &str, text: &str) {
@@ -29,6 +30,52 @@ fn complete(chat: &mut ChatWidget, id: &str) {
             },
         }),
         /*replay_kind*/ None,
+    );
+}
+
+#[tokio::test]
+async fn live_reasoning_is_an_inline_disclosure_block() {
+    let (mut chat, mut rx, _ops) = make_chatwidget_manual(/*model_override*/ None).await;
+    chat.on_task_started();
+    handle_agent_reasoning_started(&mut chat, "reasoning");
+    delta(
+        &mut chat,
+        "reasoning",
+        "**Inspecting files**\n\n- Check `lib.rs`\n- Render **Markdown**",
+    );
+
+    let cell = chat
+        .transcript
+        .active_cell
+        .as_deref()
+        .and_then(|cell| {
+            cell.as_any()
+                .downcast_ref::<history_cell::ReasoningSummaryCell>()
+        })
+        .expect("live reasoning block");
+    assert_eq!(cell.source_item_id(), Some("reasoning"));
+    assert_eq!(
+        cell.activity_disclosure(/*width*/ 80),
+        Some(history_cell::ActivityDisclosure::Reasoning)
+    );
+    let compact = visible_lines(cell.compact_hyperlink_lines(/*width*/ 80));
+    assert_eq!(
+        lines_to_single_string(&compact),
+        "• Reasoning · Inspecting files\n"
+    );
+    let expanded =
+        lines_to_single_string(&visible_lines(cell.expanded_hyperlink_lines(/*width*/ 80)));
+    assert!(expanded.contains("Check lib.rs"), "{expanded}");
+    assert!(expanded.contains("Render Markdown"), "{expanded}");
+
+    complete(&mut chat, "reasoning");
+    assert!(chat.transcript.active_cell.is_none());
+    let inserted = drain_insert_history(&mut rx);
+    assert!(
+        inserted
+            .iter()
+            .any(|lines| lines_to_single_string(lines).contains("Reasoning · Inspecting files")),
+        "completed reasoning should remain in chat history"
     );
 }
 
@@ -292,7 +339,7 @@ async fn completed_reasoning_stays_in_expanded_transcript_for_live_and_replay() 
             if let AppEvent::InsertHistoryCell(cell) = event {
                 compact.extend(cell.display_lines(/*width*/ 80));
                 expanded.extend(cell.transcript_lines(/*width*/ 80));
-                assert!(cell.raw_lines().is_empty());
+                assert!(!cell.raw_lines().is_empty());
             }
         }
         let rendered = format!(
@@ -306,12 +353,18 @@ async fn completed_reasoning_stays_in_expanded_transcript_for_live_and_replay() 
     assert_eq!(renders[0], renders[1]);
     insta::assert_snapshot!(renders[0], @r"
         Compact history:
+        • Reasoning · Inspecting repository structure
+        • Reasoning · Mapping the app structure
+        • Reasoning · Tracing terminal components
 
+            The playback clock preserves elapsed time.
         Live status:
         The playback clock preserves elapsed time.
         Expanded transcript:
-        • Inspecting repository structure
-        • Mapping the app structure
-        • The playback clock preserves elapsed time.
+        • Reasoning · Inspecting repository structure
+        • Reasoning · Mapping the app structure
+        • Reasoning · Tracing terminal components
+
+            The playback clock preserves elapsed time.
         ");
 }

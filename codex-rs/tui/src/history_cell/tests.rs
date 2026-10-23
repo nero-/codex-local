@@ -2710,6 +2710,47 @@ fn plan_update_does_not_split_url_like_tokens_in_note_or_step() {
 }
 
 #[test]
+fn reasoning_block_uses_compact_disclosure_and_rich_markdown() {
+    let mut cell = ReasoningSummaryCell::new(
+        "**Inspecting the renderer**".to_string(),
+        "## Findings\n\n- **bold** item\n\n```rust\nfn main() {}\n```".to_string(),
+        &test_cwd(),
+        /*transcript_only*/ false,
+    );
+    cell.set_source_item_id("reasoning-1".to_string());
+
+    assert_eq!(cell.activity_ids(), vec!["reasoning:reasoning-1"]);
+    assert_eq!(
+        cell.activity_disclosure(/*width*/ 80),
+        Some(ActivityDisclosure::Reasoning)
+    );
+
+    let compact = render_lines(&visible_lines(cell.compact_hyperlink_lines(/*width*/ 80)));
+    assert_eq!(compact, vec!["• Reasoning · Inspecting the renderer"]);
+
+    let expanded = render_lines(&visible_lines(cell.expanded_hyperlink_lines(/*width*/ 80)));
+    assert!(expanded.iter().any(|line| line.contains("Findings")));
+    assert!(
+        expanded
+            .iter()
+            .any(|line| line.contains("bold") && !line.contains("**"))
+    );
+    assert!(expanded.iter().any(|line| line.contains("fn main")));
+    assert!(!expanded.iter().any(|line| line.contains("```")));
+
+    let bold_styled = visible_lines(cell.expanded_hyperlink_lines(/*width*/ 80))
+        .iter()
+        .flat_map(|line| line.spans.iter())
+        .any(|span| {
+            span.content.contains("bold") && span.style.add_modifier.contains(Modifier::BOLD)
+        });
+    assert!(
+        bold_styled,
+        "reasoning Markdown should preserve bold styling"
+    );
+}
+
+#[test]
 fn reasoning_summary_block() {
     let cell = new_reasoning_summary_block(
         vec!["**High level reasoning**\n\nDetailed reasoning goes here.".to_string()],
@@ -2717,10 +2758,17 @@ fn reasoning_summary_block() {
     );
 
     let rendered_display = render_lines(&cell.display_lines(/*width*/ 80));
-    assert_eq!(rendered_display, Vec::<String>::new());
+    assert_eq!(
+        rendered_display,
+        vec![
+            "• Reasoning · High level reasoning",
+            "",
+            "    Detailed reasoning goes here.",
+        ]
+    );
 
     let rendered_transcript = render_transcript(cell.as_ref());
-    assert_eq!(rendered_transcript, vec!["• Detailed reasoning goes here."]);
+    assert_eq!(rendered_transcript, rendered_display);
 }
 
 #[test]
@@ -2775,7 +2823,10 @@ fn reasoning_summary_block_returns_reasoning_cell_when_feature_disabled() {
     );
 
     let rendered = render_transcript(cell.as_ref());
-    assert_eq!(rendered, vec!["• Detailed reasoning goes here."]);
+    assert_eq!(
+        rendered,
+        vec!["• Reasoning · Detailed reasoning goes here."]
+    );
 }
 
 #[tokio::test]
@@ -2788,7 +2839,14 @@ async fn reasoning_summary_block_respects_config_overrides() {
     );
 
     let rendered_display = render_lines(&cell.display_lines(/*width*/ 80));
-    assert_eq!(rendered_display, Vec::<String>::new());
+    assert_eq!(
+        rendered_display,
+        vec![
+            "• Reasoning · High level reasoning",
+            "",
+            "    Detailed reasoning goes here.",
+        ]
+    );
 }
 
 #[test]
@@ -2799,7 +2857,10 @@ fn reasoning_summary_block_falls_back_when_header_is_missing() {
     );
 
     let rendered = render_transcript(cell.as_ref());
-    assert_eq!(rendered, vec!["• **High level reasoning without closing"]);
+    assert_eq!(
+        rendered,
+        vec!["• Reasoning · High level reasoning without closing"]
+    );
 }
 
 #[test]
@@ -2810,7 +2871,10 @@ fn reasoning_summary_block_falls_back_when_summary_is_missing() {
     );
 
     let rendered = render_transcript(cell.as_ref());
-    assert_eq!(rendered, vec!["• High level reasoning without closing"]);
+    assert_eq!(
+        rendered,
+        vec!["• Reasoning · High level reasoning without closing"]
+    );
 
     let cell = new_reasoning_summary_block(
         vec!["**High level reasoning without closing**\n\n  ".to_string()],
@@ -2818,7 +2882,10 @@ fn reasoning_summary_block_falls_back_when_summary_is_missing() {
     );
 
     let rendered = render_transcript(cell.as_ref());
-    assert_eq!(rendered, vec!["• High level reasoning without closing"]);
+    assert_eq!(
+        rendered,
+        vec!["• Reasoning · High level reasoning without closing"]
+    );
 }
 
 #[test]
@@ -2829,13 +2896,13 @@ fn reasoning_summary_block_keeps_title_only_summary_in_expanded_transcript() {
     );
 
     let rendered_display = render_lines(&cell.display_lines(/*width*/ 80));
-    assert_eq!(rendered_display, Vec::<String>::new());
+    assert_eq!(
+        rendered_display,
+        vec!["• Reasoning · Confirming backend JSONL source"]
+    );
 
     let rendered_transcript = render_transcript(cell.as_ref());
-    assert_eq!(
-        rendered_transcript,
-        vec!["• Confirming backend JSONL source"]
-    );
+    assert_eq!(rendered_transcript, rendered_display);
 }
 
 #[test]
@@ -2846,10 +2913,17 @@ fn reasoning_summary_block_splits_header_and_summary_when_present() {
     );
 
     let rendered_display = render_lines(&cell.display_lines(/*width*/ 80));
-    assert_eq!(rendered_display, Vec::<String>::new());
+    assert_eq!(
+        rendered_display,
+        vec![
+            "• Reasoning · High level plan",
+            "",
+            "    We should fix the bug next.",
+        ]
+    );
 
     let rendered_transcript = render_transcript(cell.as_ref());
-    assert_eq!(rendered_transcript, vec!["• We should fix the bug next."]);
+    assert_eq!(rendered_transcript, rendered_display);
 }
 
 #[test]
@@ -2863,10 +2937,13 @@ fn reasoning_summary_block_hides_empty_html_comment_parts() {
     );
 
     let rendered_display = render_lines(&cell.display_lines(/*width*/ 80));
-    assert_eq!(rendered_display, Vec::<String>::new());
+    assert_eq!(
+        rendered_display,
+        vec!["• Reasoning · Checking the first thing"]
+    );
 
     let rendered_transcript = render_transcript(cell.as_ref());
-    assert_eq!(rendered_transcript, Vec::<String>::new());
+    assert_eq!(rendered_transcript, rendered_display);
 }
 
 #[test]
@@ -2881,10 +2958,13 @@ fn reasoning_summary_block_preserves_bold_content_after_empty_html_comment_part(
     );
 
     let rendered_display = render_lines(&cell.display_lines(/*width*/ 80));
-    assert_eq!(rendered_display, Vec::<String>::new());
+    assert_eq!(
+        rendered_display,
+        vec!["• Reasoning · Status", "", "    Important conclusion"]
+    );
 
     let rendered_transcript = render_transcript(cell.as_ref());
-    assert_eq!(rendered_transcript, vec!["• Important conclusion"]);
+    assert_eq!(rendered_transcript, rendered_display);
 
     let cell = new_reasoning_summary_block(
         vec![
@@ -2895,7 +2975,10 @@ fn reasoning_summary_block_preserves_bold_content_after_empty_html_comment_part(
     );
 
     let rendered_transcript = render_transcript(cell.as_ref());
-    assert_eq!(rendered_transcript, vec!["• Result: keep this"]);
+    assert_eq!(
+        rendered_transcript,
+        vec!["• Reasoning · Status", "", "    Result: keep this"]
+    );
 }
 
 #[test]
@@ -2909,10 +2992,13 @@ fn reasoning_summary_block_strips_header_after_leading_empty_part() {
     );
 
     let rendered_display = render_lines(&cell.display_lines(/*width*/ 80));
-    assert_eq!(rendered_display, Vec::<String>::new());
+    assert_eq!(
+        rendered_display,
+        vec!["• Reasoning · Checking tests", "", "    Tests passed"]
+    );
 
     let rendered_transcript = render_transcript(cell.as_ref());
-    assert_eq!(rendered_transcript, vec!["• Tests passed"]);
+    assert_eq!(rendered_transcript, rendered_display);
 }
 
 #[test]
@@ -2926,10 +3012,10 @@ fn reasoning_summary_block_drops_empty_part_after_real_content() {
     );
 
     let rendered_display = render_lines(&cell.display_lines(/*width*/ 80));
-    assert_eq!(rendered_display, Vec::<String>::new());
+    assert_eq!(rendered_display, vec!["• Reasoning · Plan", "", "    done"]);
 
     let rendered_transcript = render_transcript(cell.as_ref());
-    assert_eq!(rendered_transcript, vec!["• done"]);
+    assert_eq!(rendered_transcript, rendered_display);
 }
 
 #[test]
@@ -2940,10 +3026,13 @@ fn reasoning_summary_block_preserves_literal_html_comment() {
     );
 
     let rendered_display = render_lines(&cell.display_lines(/*width*/ 80));
-    assert_eq!(rendered_display, Vec::<String>::new());
+    assert_eq!(
+        rendered_display,
+        vec!["• Reasoning · Plan", "", "    Use <!-- --> in JSX."]
+    );
 
     let rendered_transcript = render_transcript(cell.as_ref());
-    assert_eq!(rendered_transcript, vec!["• Use <!-- --> in JSX."]);
+    assert_eq!(rendered_transcript, rendered_display);
 }
 
 #[test]

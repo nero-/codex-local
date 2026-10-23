@@ -1,11 +1,18 @@
 ---
 source: tui/src/chatwidget/tests/exec_flow.rs
+assertion_line: 334
 expression: "renders[0]"
 ---
 Compact:
 • Explored
   └ List missing (exit 1)
-    Read index.html
+
+• Reasoning · Inspecting the page
+
+• Reasoning · Checking its contents
+
+• Explored
+  └ Read index.html
 
 • Ran echo boundary
   └ run output
@@ -23,9 +30,9 @@ $ ls missing
 list output
 ✗ (1) • 5ms
 
-• Inspecting the page
+• Reasoning · Inspecting the page
 
-• Checking its contents
+• Reasoning · Checking its contents
 
 $ cat index.html
 read output
@@ -49,6 +56,10 @@ Raw:
 $ ls missing
 list output
 ✗ (1) • 5ms
+
+Inspecting the page
+
+Checking its contents
 
 $ cat index.html
 read output

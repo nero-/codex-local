@@ -653,6 +653,8 @@ pub(crate) struct ChatWidget {
     reasoning_header: Option<String>,
     // Preserves reasoning-summary part boundaries for transcript-only recording.
     reasoning_summary_parts: Vec<String>,
+    // Reasoning completed while a tool remained active; flush it immediately after that cell.
+    deferred_reasoning_blocks: Vec<Box<dyn HistoryCell>>,
     status_state: StatusState,
     review: ReviewState,
     // Active hook runs render in a dedicated live cell so they can run alongside tools.
@@ -1201,8 +1203,33 @@ impl ChatWidget {
     }
 
     fn flush_active_cell(&mut self) {
+        if self
+            .transcript
+            .active_cell
+            .as_deref()
+            .is_some_and(Self::is_empty_reasoning_cell)
+        {
+            let _ = self.transcript.take_active_cell();
+        }
         if let Some(active) = self.transcript.take_active_cell() {
             self.app_event_tx.send(AppEvent::InsertHistoryCell(active));
+            self.request_pending_usage_output_insertion();
+        }
+        self.flush_deferred_reasoning_blocks();
+    }
+
+    fn is_empty_reasoning_cell(cell: &dyn HistoryCell) -> bool {
+        cell.as_any()
+            .downcast_ref::<history_cell::ReasoningSummaryCell>()
+            .is_some_and(|reasoning| {
+                let (header, content) = reasoning.source_parts();
+                header.is_empty() && content.is_empty()
+            })
+    }
+
+    fn flush_deferred_reasoning_blocks(&mut self) {
+        for cell in std::mem::take(&mut self.deferred_reasoning_blocks) {
+            self.app_event_tx.send(AppEvent::InsertHistoryCell(cell));
             self.request_pending_usage_output_insertion();
         }
     }
@@ -1237,6 +1264,7 @@ impl ChatWidget {
             self.app_event_tx.send(AppEvent::InsertHistoryCell(active));
             self.request_pending_usage_output_insertion();
         }
+        self.flush_deferred_reasoning_blocks();
         self.app_event_tx.send(AppEvent::InsertHistoryCell(cell));
     }
 
@@ -1244,6 +1272,14 @@ impl ChatWidget {
         &mut self,
         cell: &dyn HistoryCell,
     ) -> Option<Box<dyn HistoryCell>> {
+        if self
+            .transcript
+            .active_cell
+            .as_deref()
+            .is_some_and(Self::is_empty_reasoning_cell)
+        {
+            let _ = self.transcript.take_active_cell();
+        }
         // Keep the placeholder session header as the active cell until real session info arrives,
         // so we can merge headers instead of committing a duplicate box to history.
         let keep_placeholder_header_active = !self.is_session_configured()
@@ -1435,6 +1471,16 @@ impl ChatWidget {
 
     /// Mark the active cell as failed (✗) and flush it into history.
     fn finalize_active_cell_as_failed(&mut self) {
+        if self
+            .transcript
+            .active_cell
+            .as_deref()
+            .is_some_and(Self::is_empty_reasoning_cell)
+        {
+            let _ = self.transcript.take_active_cell();
+            self.flush_deferred_reasoning_blocks();
+            return;
+        }
         if let Some(mut cell) = self.transcript.take_active_cell() {
             // Insert finalized cell into history and keep grouping consistent.
             if let Some(exec) = cell.as_any_mut().downcast_mut::<ExecCell>() {
@@ -1447,8 +1493,11 @@ impl ChatWidget {
             {
                 computer.mark_failed();
             }
-            self.add_boxed_history(cell);
+            self.app_event_tx.send(AppEvent::InsertHistoryCell(cell));
             self.request_pending_usage_output_insertion();
+            self.flush_deferred_reasoning_blocks();
+        } else {
+            self.flush_deferred_reasoning_blocks();
         }
     }
 

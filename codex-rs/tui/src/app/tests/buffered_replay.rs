@@ -172,9 +172,11 @@ async fn refreshed_active_reasoning_accepts_later_deltas_and_complete_summary() 
             .collect::<String>();
         insta::allow_duplicates! {
             insta::assert_snapshot!(transcript, @"
-            • Original analysis paragraph
-              Running checks
-              Final paragraph
+            • Reasoning · First heading
+
+                Original analysis paragraph
+                Running checks
+                Final paragraph
             ");
         }
     }

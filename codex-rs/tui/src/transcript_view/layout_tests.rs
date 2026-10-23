@@ -33,6 +33,37 @@ impl HistoryCell for Cell {
 }
 
 #[test]
+fn reasoning_disclosure_uses_a_specific_label() {
+    let layout = activity_layout(
+        ActivityTranscriptLines {
+            activity: vec![HyperlinkLine::from("• Reasoning · Checking files")],
+            auxiliary: Vec::new(),
+            disclosure: Some(crate::history_cell::ActivityDisclosure::Reasoning),
+        },
+        /*width*/ 80,
+        /*expanded*/ false,
+        /*shortcut*/ None,
+    );
+
+    let area = Rect::new(
+        /*x*/ 0, /*y*/ 0, /*width*/ 80, /*height*/ 2,
+    );
+    let mut buffer = Buffer::empty(area);
+    layout.render(area, &mut buffer, /*start_row*/ 0);
+    let rendered = (0..area.height)
+        .map(|y| {
+            (0..area.width)
+                .map(|x| buffer[(x, y)].symbol())
+                .collect::<String>()
+                .trim_end()
+                .to_owned()
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(rendered.contains("+ Show reasoning"), "{rendered}");
+}
+
+#[test]
 fn layouts_refresh_for_width_animation_and_mutable_frames() {
     for mutable in [false, true] {
         let cell = Arc::new(Cell {

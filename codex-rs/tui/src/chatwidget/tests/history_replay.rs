@@ -1263,7 +1263,7 @@ async fn replayed_reasoning_item_preserves_summary_parts_and_hides_raw_reasoning
         }
         other => panic!("expected InsertHistoryCell, got {other:?}"),
     };
-    assert_eq!(rendered, "• done\n");
+    assert_eq!(rendered, "• Reasoning · Plan\n\n    done\n");
     assert!(!rendered.contains("Raw reasoning"));
 }
 
@@ -1624,7 +1624,7 @@ async fn live_reasoning_summary_drops_empty_parts_without_losing_content() {
         }
         other => panic!("expected InsertHistoryCell, got {other:?}"),
     };
-    assert_eq!(rendered, "• done\n");
+    assert_eq!(rendered, "• Reasoning · Plan\n\n    done\n");
 }
 
 #[tokio::test]

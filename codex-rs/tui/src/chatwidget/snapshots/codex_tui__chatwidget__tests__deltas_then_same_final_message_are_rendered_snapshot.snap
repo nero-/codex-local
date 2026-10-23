@@ -1,5 +1,8 @@
 ---
 source: tui/src/chatwidget/tests/status_and_layout.rs
+assertion_line: 4709
 expression: combined
 ---
+• Reasoning · I will first analyze the request.
+
 • Here is the result.

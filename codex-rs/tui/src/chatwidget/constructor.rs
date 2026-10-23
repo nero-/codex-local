@@ -217,6 +217,7 @@ impl ChatWidget {
             reasoning_buffer: String::new(),
             reasoning_header: None,
             reasoning_summary_parts: Vec::new(),
+            deferred_reasoning_blocks: Vec::new(),
             status_state: StatusState::default(),
             review: ReviewState::default(),
             active_hook_cell: None,

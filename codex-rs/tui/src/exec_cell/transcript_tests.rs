@@ -1,4 +1,4 @@
-//! Grouped command details retain terminal input in raw output without exposing hidden reasoning.
+//! Grouped command details retain terminal input and reasoning in expanded output.
 
 use super::*;
 use crate::exec_cell::CommandOutput;
@@ -31,7 +31,7 @@ fn completed_read(name: &str, output: &str) -> ExecCell {
 }
 
 #[test]
-fn raw_grouped_history_retains_terminal_input_and_omits_reasoning() {
+fn raw_grouped_history_retains_terminal_input_and_reasoning() {
     let mut group = completed_read("first.txt", "first output");
     group
         .group

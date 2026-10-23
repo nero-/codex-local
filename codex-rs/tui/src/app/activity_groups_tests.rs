@@ -107,14 +107,19 @@ async fn older_page_hydration_keeps_pending_computer_and_exploration_completion(
         app.transcript_cells
             .extend(project(&app, &current.items[1..2]));
         app.join_older_activity_group(/*boundary*/ 1, std::slice::from_ref(&current));
-        assert!(app.transcript_cells.is_empty());
+        assert_eq!(app.transcript_cells.len(), 2);
+        assert!(
+            app.transcript_cells[1]
+                .as_any()
+                .is::<history_cell::ReasoningSummaryCell>()
+        );
         if matches!(kind, ActivityKind::Computer) {
             assert!(
                 crate::chatwidget::tests::helpers::render_bottom_popup(
                     &app.chat_widget,
                     /*width*/ 80
                 )
-                .contains("Using computer · 3 actions")
+                .contains("Using computer · 2 actions")
             );
         }
         match kind {
@@ -129,18 +134,19 @@ async fn older_page_hydration_keeps_pending_computer_and_exploration_completion(
         }
         current.items[3] = call("pending", kind, "completed");
         let expected = project(&app, &current.items);
+        assert_eq!(expected.len(), 3);
         assert_eq!(
             app.chat_widget
                 .active_cell_transcript_lines(/*width*/ 80)
                 .unwrap(),
-            expected[0].transcript_lines(/*width*/ 80),
+            expected[2].transcript_lines(/*width*/ 80),
             "{kind:?}"
         );
     }
 }
 
 #[tokio::test]
-async fn trailing_reasoning_identity_rejects_identical_text_from_another_turn() {
+async fn visible_reasoning_stays_separate_across_page_joins() {
     for kind in [ActivityKind::Computer, ActivityKind::Exploration] {
         let mut app = make_test_app().await;
         let mut same_turn = reasoning("same-turn-detail");
@@ -159,28 +165,10 @@ async fn trailing_reasoning_identity_rejects_identical_text_from_another_turn() 
             let trailing = project(&app, std::slice::from_ref(&detail)).remove(/*index*/ 0);
             app.transcript_cells = vec![Arc::clone(&older), Arc::clone(&trailing)];
             app.join_older_activity_group(/*boundary*/ 1, &turns);
-            if detail.id() == "same-turn-detail" {
-                let expected = project(&app, &turns[0].items);
-                assert_eq!(app.transcript_cells.len(), 1);
-                assert_eq!(app.transcript_cells[0].raw_lines(), expected[0].raw_lines());
-            } else {
-                assert_eq!(app.transcript_cells.len(), 2);
-                assert!(Arc::ptr_eq(&app.transcript_cells[0], &older));
-                assert!(Arc::ptr_eq(&app.transcript_cells[1], &trailing));
-            }
+            assert_eq!(app.transcript_cells.len(), 2);
+            assert!(Arc::ptr_eq(&app.transcript_cells[0], &older));
+            assert!(Arc::ptr_eq(&app.transcript_cells[1], &trailing));
         }
-        // Live reasoning without persisted identity cannot prove an older-page relationship.
-        let unidentified: Arc<dyn HistoryCell> = Arc::new(history_cell::ReasoningSummaryCell::new(
-            String::new(),
-            "Exactly the same reasoning text".to_owned(),
-            app.config.cwd.as_path(),
-            /*transcript_only*/ true,
-        ));
-        app.transcript_cells = project(&app, &turns[0].items[..1]);
-        app.transcript_cells.push(Arc::clone(&unidentified));
-        app.join_older_activity_group(/*boundary*/ 1, &turns);
-        assert_eq!(app.transcript_cells.len(), 2);
-        assert!(Arc::ptr_eq(&app.transcript_cells[1], &unidentified));
     }
 }
 
@@ -256,7 +244,12 @@ async fn failed_exploration_retains_following_reasoning_at_every_page_split() {
         reasoning("after-failure"),
     ]);
     let expected = project(&app, &current.items);
-    assert_eq!(expected.len(), 1);
+    assert_eq!(expected.len(), 2);
+    assert!(
+        expected[1]
+            .as_any()
+            .is::<history_cell::ReasoningSummaryCell>()
+    );
     for split in 1..current.items.len() {
         let older = project(&app, &current.items[..split]);
         let boundary = older.len();

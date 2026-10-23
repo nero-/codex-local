@@ -60,6 +60,14 @@ Only these upstream seams are intentionally modified:
    - `codex models refresh`: GET the configured provider's `/v1/models`,
      read `max_model_len`/`context_length`, rewrite the catalog.
    - `codex models list`: print catalog models.
+6. Inline reasoning disclosure in `codex-rs/tui`
+   - `ReasoningSummaryCell` is a visible transcript block with a compact heading
+     and an expandable Markdown body.
+   - `F4` focuses the latest activity; `Enter` toggles details. The owned
+     transcript also exposes `+ Show reasoning` as a mouse target.
+   - Standalone reasoning cells are kept separate from tool groups. Reasoning
+     that arrives while a tool is still active is deferred and flushed directly
+     after that tool cell.
 
 Do not rename the local provider away from a `local*` prefix without updating
 that normalization; vLLM rejects `minimal`/`medium` with HTTP 400.
@@ -165,6 +173,16 @@ show_raw_agent_reasoning = true
 check_for_update_on_startup = false
 model_catalog_json = "/Users/jg/.codex/model-catalog.json"
 
+[tui]
+fullscreen_transcript = true
+raw_output_mode = false
+
+[tui.rendering]
+mermaid = true
+math = true
+tables = true
+lists = true
+
 [model_providers.local-default]
 name = "local"
 base_url = "http://192.168.50.219:8015/v1"
@@ -179,6 +197,10 @@ Why these matter:
 
 - `wire_api = "chat"` is rejected by Codex 0.16x; use `responses`.
 - `requires_openai_auth = false` keeps the endpoint unauthenticated.
+- `fullscreen_transcript = true` enables in-place disclosure controls; without
+  an alternate screen, the TUI falls back to the terminal-owned transcript.
+- `raw_output_mode = false` keeps Markdown rich rendering enabled. The renderer
+  already supports headings, lists, tables, code fences, math, and Mermaid.
 - Provider `name` must start with `local` so effort normalization applies.
 - `daemon_auto_start = false` is required for `/model` correctness. The TUI gets
   its model list from the app-server; a managed daemon can serve a stale GPT
@@ -211,6 +233,11 @@ codex exec --sandbox read-only --skip-git-repo-check "Say OK." </dev/null
 - `codex exec -c model_reasoning_effort=medium ...` must not return HTTP 400.
 - In the TUI, `/model` must list only the local catalog; effort must show
   off/low/medium/high/xhigh/max.
+- In the TUI, reasoning appears as a collapsed `Reasoning` block. Press `F4`,
+  then `Enter`, or click `+ Show reasoning`, to expand it; press `Enter` again to
+  collapse it. `Ctrl+T` shows the full transcript.
+- Assistant and expanded reasoning Markdown should render code fences, tables,
+  lists, math, and Mermaid without literal Markdown delimiters.
 - If testing TUI with a pty, pass `--no-daemon` only as a diagnostic; the shipped
   config already disables daemon auto-start.
 

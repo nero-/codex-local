@@ -6,23 +6,6 @@
 use super::*;
 use crate::markdown_render::ListSpacing;
 
-fn latest_summary_line(text: &str) -> Option<String> {
-    text.lines().rev().find_map(|line| {
-        let line = line.trim();
-        if line.is_empty() || line.starts_with("<!--") {
-            return None;
-        }
-        let line = line.trim_start_matches('#').trim();
-        let line = if let Some(stripped) = line.strip_prefix("**") {
-            let (bold, trailing) = stripped.split_once("**")?;
-            format!("{bold}{trailing}")
-        } else {
-            line.to_string()
-        };
-        (!line.is_empty()).then_some(line)
-    })
-}
-
 impl ChatWidget {
     pub(super) fn on_reasoning_item_started(&mut self, id: String) {
         if self.status_state.reasoning_resume_turn_id.take().is_some()
@@ -33,11 +16,60 @@ impl ChatWidget {
         if self.status_state.reasoning_item_id.as_ref() == Some(&id) {
             return;
         }
+        self.start_live_reasoning_block(&id);
         self.status_state.reasoning_item_id = Some(id);
         self.status_state.reasoning_recovered_after_refresh = false;
         self.reasoning_buffer.clear();
         self.reasoning_summary_parts.clear();
         self.restore_reasoning_status_header();
+    }
+
+    /// Start an inline reasoning block when the active cell can be committed without interrupting
+    /// a tool or another stream. Interleaved reasoning falls back to the status-row presentation.
+    fn start_live_reasoning_block(&mut self, id: &str) {
+        if let Some(active) = self.transcript.active_cell.as_ref() {
+            let reasoning = active.as_any().is::<history_cell::ReasoningSummaryCell>();
+            let replaceable =
+                self.has_completed_tool_activity() || reasoning || active.activity_ids().is_empty();
+            if !replaceable || self.has_active_stream_tail() {
+                return;
+            }
+        }
+        self.flush_active_cell();
+        let mut cell = history_cell::ReasoningSummaryCell::new(
+            String::new(),
+            String::new(),
+            &self.config.cwd,
+            /*transcript_only*/ false,
+        );
+        cell.set_source_item_id(id.to_string());
+        self.transcript.active_cell = Some(Box::new(cell));
+        self.bump_active_cell_revision();
+    }
+
+    fn refresh_live_reasoning_block(&mut self, id: &str) -> bool {
+        let header = history_cell::reasoning_block_title(&self.reasoning_buffer);
+        let mut content = self.reasoning_summary_parts.join("\n\n");
+        if !content.is_empty() && !self.reasoning_buffer.is_empty() {
+            content.push_str("\n\n");
+        }
+        content.push_str(&self.reasoning_buffer);
+
+        let Some(cell) = self
+            .transcript
+            .active_cell
+            .as_mut()
+            .and_then(|cell| {
+                cell.as_any_mut()
+                    .downcast_mut::<history_cell::ReasoningSummaryCell>()
+            })
+            .filter(|cell| cell.source_item_id() == Some(id))
+        else {
+            return false;
+        };
+        cell.set_source(header.unwrap_or_default(), content);
+        self.bump_active_cell_revision();
+        true
     }
 
     pub(super) fn restore_reasoning_status_header(&mut self) {
@@ -48,8 +80,8 @@ impl ChatWidget {
         {
             return;
         }
-        self.reasoning_header =
-            latest_summary_line(&self.reasoning_buffer).or(self.reasoning_header.take());
+        self.reasoning_header = history_cell::latest_reasoning_heading(&self.reasoning_buffer)
+            .or(self.reasoning_header.take());
         if let Some(header) = self.reasoning_header.clone() {
             self.status_state.terminal_title_status_kind = TerminalTitleStatusKind::Thinking;
             self.set_status_header(header);
@@ -321,8 +353,14 @@ impl ChatWidget {
             return;
         }
 
-        self.reasoning_header =
-            latest_summary_line(&self.reasoning_buffer).or(self.reasoning_header.take());
+        if let Some(id) = self.status_state.reasoning_item_id.clone()
+            && self.refresh_live_reasoning_block(&id)
+        {
+            self.request_redraw();
+        }
+
+        self.reasoning_header = history_cell::latest_reasoning_heading(&self.reasoning_buffer)
+            .or(self.reasoning_header.take());
         let Some(header) = self.reasoning_header.as_deref() else {
             // No usable summary has arrived yet.
             return;
@@ -350,7 +388,7 @@ impl ChatWidget {
     }
 
     pub(super) fn on_agent_reasoning_final(&mut self) {
-        // At the end of a reasoning block, record transcript-only content.
+        // At the end of a reasoning block, record the complete inline block.
         if !self.reasoning_buffer.is_empty() {
             self.reasoning_summary_parts
                 .push(std::mem::take(&mut self.reasoning_buffer));
@@ -359,7 +397,7 @@ impl ChatWidget {
             .reasoning_summary_parts
             .iter()
             .rev()
-            .find_map(|part| latest_summary_line(part))
+            .find_map(|part| history_cell::latest_reasoning_heading(part))
             .or(self.reasoning_header.take());
         if !self.reasoning_summary_parts.is_empty() {
             let reasoning_parts = std::mem::take(&mut self.reasoning_summary_parts);
@@ -368,15 +406,48 @@ impl ChatWidget {
             if let Some(id) = &self.status_state.reasoning_item_id {
                 cell.set_source_item_id(id.clone());
             }
-            let cell: Box<dyn HistoryCell> = cell;
-            let result = match self.transcript.active_cell.as_mut() {
-                Some(active) => active.append_reasoning(cell),
-                None => Err(cell),
-            };
-            match result {
-                Ok(()) => self.bump_active_cell_revision(),
-                Err(cell) => self.add_boxed_history(cell),
+            if let Some(active) = self.transcript.active_cell.as_mut().and_then(|active| {
+                active
+                    .as_any_mut()
+                    .downcast_mut::<history_cell::ReasoningSummaryCell>()
+            }) && active.source_item_id() == self.status_state.reasoning_item_id.as_deref()
+            {
+                let (header, content) = cell.source_parts();
+                let (header, content) = (header.to_string(), content.to_string());
+                active.set_source(header, content);
+                self.bump_active_cell_revision();
+                self.flush_active_cell();
+            } else {
+                let cell: Box<dyn HistoryCell> = cell;
+                let tool_is_active = self
+                    .transcript
+                    .active_cell
+                    .as_ref()
+                    .is_some_and(|active| !active.activity_ids().is_empty());
+                if tool_is_active {
+                    self.deferred_reasoning_blocks.push(cell);
+                    self.bump_active_cell_revision();
+                } else {
+                    self.add_boxed_history(cell);
+                }
             }
+        }
+        let empty_live_reasoning = self
+            .transcript
+            .active_cell
+            .as_ref()
+            .and_then(|active| {
+                active
+                    .as_any()
+                    .downcast_ref::<history_cell::ReasoningSummaryCell>()
+            })
+            .is_some_and(|cell| {
+                let (header, content) = cell.source_parts();
+                header.is_empty() && content.is_empty()
+            });
+        if empty_live_reasoning {
+            let _ = self.transcript.take_active_cell();
+            self.bump_active_cell_revision();
         }
         self.reasoning_buffer.clear();
         // Keep the last useful summary through tools and later empty items.

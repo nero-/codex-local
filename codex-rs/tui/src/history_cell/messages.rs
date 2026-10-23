@@ -1,5 +1,5 @@
 //! User, assistant, reasoning, and streaming message history cells.
-//! Completed reasoning is retained in the expanded transcript, not compact scrollback.
+//! Reasoning is a first-class Markdown block that can be disclosed in the owned transcript.
 
 use super::markdown_render_cache::MarkdownRenderCache;
 use super::*;
@@ -322,7 +322,7 @@ fn wrap_user_message(
 
 #[derive(Debug)]
 pub(crate) struct ReasoningSummaryCell {
-    _header: String,
+    header: String,
     content: String,
     /// Session cwd used to render local file links inside the reasoning body.
     cwd: PathBuf,
@@ -336,8 +336,18 @@ impl ReasoningSummaryCell {
         &self.content
     }
 
+    pub(crate) fn source_parts(&self) -> (&str, &str) {
+        (&self.header, &self.content)
+    }
+
     pub(crate) fn set_source_item_id(&mut self, id: String) {
         self.source_item_id = Some(id);
+    }
+
+    /// Replace the streaming source without changing this cell's disclosure identity.
+    pub(crate) fn set_source(&mut self, header: String, content: String) {
+        self.header = header;
+        self.content = content;
     }
 
     pub(crate) fn source_item_id(&self) -> Option<&str> {
@@ -352,7 +362,7 @@ impl ReasoningSummaryCell {
     /// cwd active when the summary was recorded.
     pub(crate) fn new(header: String, content: String, cwd: &Path, transcript_only: bool) -> Self {
         Self {
-            _header: header,
+            header,
             content,
             cwd: cwd.to_path_buf(),
             transcript_only,
@@ -360,34 +370,87 @@ impl ReasoningSummaryCell {
         }
     }
 
-    fn lines(&self, width: u16) -> Vec<HyperlinkLine> {
+    fn display_title(&self) -> Option<String> {
+        latest_reasoning_heading(&self.header).or_else(|| reasoning_block_title(&self.content))
+    }
+
+    fn compact_line(&self, width: u16) -> HyperlinkLine {
+        let mut spans = vec!["• ".dim(), "Reasoning".bold()];
+        if let Some(title) = self.display_title()
+            && !title.eq_ignore_ascii_case("reasoning")
+        {
+            spans.push(" · ".dim());
+            spans.push(title.into());
+        }
+        HyperlinkLine::from(
+            crate::line_truncation::truncate_line_with_ellipsis_if_overflow(
+                Line::from(spans),
+                usize::from(width),
+            ),
+        )
+    }
+
+    fn body_lines(&self, width: u16) -> Vec<HyperlinkLine> {
+        let content = self.content.trim();
+        let body = match (reasoning_block_title(content), self.display_title()) {
+            (Some(first_line_title), Some(title)) if first_line_title == title => content
+                .split_once('\n')
+                .map_or("", |(_, remaining)| remaining.trim_start()),
+            _ => content,
+        };
+        let Some(body_width) =
+            crate::width::usable_content_width_u16(width, /*reserved_cols*/ 4)
+        else {
+            return Vec::new();
+        };
         let lines = crate::markdown_render::render_markdown_lines_with_width_and_cwd(
-            &self.content,
+            body,
+            Some(body_width),
+            Some(self.cwd.as_path()),
+        );
+        normalize_whitespace_only_hyperlink_lines(prefix_hyperlink_lines(
+            lines,
+            "    ".into(),
+            "    ".into(),
+        ))
+    }
+
+    fn expanded_lines(&self, width: u16) -> Vec<HyperlinkLine> {
+        if width == 0 {
+            return Vec::new();
+        }
+        let mut header = vec!["• ".dim(), "Reasoning".bold()];
+        if let Some(title) = self.display_title()
+            && !title.eq_ignore_ascii_case("reasoning")
+        {
+            header.push(" · ".dim());
+            header.push(title.into());
+        }
+        let mut lines = crate::terminal_hyperlinks::adaptive_wrap_hyperlink_lines(
+            &[HyperlinkLine::from(Line::from(header))],
+            RtOptions::new(width as usize).subsequent_indent("  ".into()),
+        );
+        let body = self.body_lines(width);
+        if !body.is_empty() {
+            lines.push(HyperlinkLine::from(""));
+            lines.extend(body);
+        }
+        lines
+    }
+
+    fn legacy_transcript_lines(&self, width: u16) -> Vec<HyperlinkLine> {
+        let lines = crate::markdown_render::render_markdown_lines_with_width_and_cwd(
+            self.content.trim(),
             crate::width::usable_content_width_u16(width, /*reserved_cols*/ 2),
             Some(self.cwd.as_path()),
         );
-        let summary_style = Style::default().dim().italic();
-        let summary_lines = lines
-            .into_iter()
-            .map(|mut line| {
-                line.line.spans = line
-                    .line
-                    .spans
-                    .into_iter()
-                    .map(|span| span.patch_style(summary_style))
-                    .collect();
-                if let Some(source) = &mut line.source {
-                    source.span_style = source.span_style.patch(summary_style);
-                }
-                line
-            })
-            .collect::<Vec<_>>();
-
-        crate::terminal_hyperlinks::adaptive_wrap_hyperlink_lines(
-            &summary_lines,
-            RtOptions::new(width as usize)
-                .initial_indent("• ".dim().into())
-                .subsequent_indent("  ".into()),
+        normalize_whitespace_only_hyperlink_lines(
+            crate::terminal_hyperlinks::adaptive_wrap_hyperlink_lines(
+                &lines,
+                RtOptions::new(width as usize)
+                    .initial_indent("• ".dim().into())
+                    .subsequent_indent("  ".into()),
+            ),
         )
     }
 }
@@ -401,7 +464,17 @@ impl HistoryCell for ReasoningSummaryCell {
         if self.transcript_only {
             Vec::new()
         } else {
-            self.lines(width)
+            self.expanded_lines(width)
+        }
+    }
+
+    fn compact_hyperlink_lines(&self, width: u16) -> Vec<HyperlinkLine> {
+        if self.transcript_only {
+            Vec::new()
+        } else if self.activity_ids().is_empty() {
+            self.expanded_lines(width)
+        } else {
+            vec![self.compact_line(width)]
         }
     }
 
@@ -410,7 +483,27 @@ impl HistoryCell for ReasoningSummaryCell {
     }
 
     fn transcript_hyperlink_lines(&self, width: u16) -> Vec<HyperlinkLine> {
-        self.lines(width)
+        if self.transcript_only {
+            self.legacy_transcript_lines(width)
+        } else {
+            self.expanded_lines(width)
+        }
+    }
+
+    fn expanded_hyperlink_lines(&self, width: u16) -> Vec<HyperlinkLine> {
+        self.transcript_hyperlink_lines(width)
+    }
+
+    fn activity_ids(&self) -> Vec<String> {
+        self.source_item_id
+            .as_ref()
+            .map(|id| vec![format!("reasoning:{id}")])
+            .unwrap_or_default()
+    }
+
+    fn activity_disclosure(&self, _width: u16) -> Option<ActivityDisclosure> {
+        (!self.transcript_only && !self.content.trim().is_empty())
+            .then_some(ActivityDisclosure::Reasoning)
     }
 
     fn raw_lines(&self) -> Vec<Line<'static>> {
@@ -740,8 +833,11 @@ pub(crate) fn new_spoken_user_prompt(message: String) -> UserHistoryCell {
     cell
 }
 
-/// Retain a completed reasoning block in the expanded transcript only.
-/// Activity headings belong to the live status row and must not accumulate in scrollback.
+/// Build a completed reasoning block for the compact transcript.
+///
+/// The owned transcript renders a single-line summary by default and exposes the full Markdown
+/// body through its disclosure controls. Legacy scrollback has no local disclosure affordance, so
+/// it renders the expanded block directly.
 ///
 /// The helper snapshots `cwd` into the returned cell so local file links render the same way they
 /// did while the turn was live, even if rendering happens after other app state has advanced. Part
@@ -753,8 +849,49 @@ pub(crate) fn new_reasoning_summary_block(
 ) -> Box<ReasoningSummaryCell> {
     let (header, content) = split_reasoning_summary_parts(&reasoning_parts);
     Box::new(ReasoningSummaryCell::new(
-        header, content, cwd, /*transcript_only*/ true,
+        header, content, cwd, /*transcript_only*/ false,
     ))
+}
+
+/// Latest nonempty heading-like line, used by both reasoning blocks and the live status row.
+pub(crate) fn latest_reasoning_heading(text: &str) -> Option<String> {
+    text.lines().rev().find_map(|line| {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with("<!--") {
+            return None;
+        }
+        let line = line.trim_start_matches('#').trim();
+        let line = if let Some(stripped) = line.strip_prefix("**") {
+            let (bold, trailing) = stripped.split_once("**")?;
+            format!("{bold}{trailing}")
+        } else {
+            line.to_string()
+        };
+        (!line.is_empty()).then_some(line)
+    })
+}
+
+/// Prefer the first explicit heading in a structured reasoning source, then fall back to the
+/// latest usable line so a streaming block still gets a useful one-line label.
+pub(crate) fn reasoning_block_title(text: &str) -> Option<String> {
+    for line in text.lines() {
+        let line = line.trim();
+        if let Some(heading) = line.strip_prefix('#') {
+            let heading = heading.trim_start_matches('#').trim();
+            if !heading.is_empty() {
+                return Some(heading.replace("**", ""));
+            }
+        }
+        if let Some(stripped) = line.strip_prefix("**")
+            && let Some((bold, trailing)) = stripped.split_once("**")
+        {
+            return Some(format!("{bold}{trailing}").replace("**", ""));
+        }
+    }
+    text.lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty() && !line.starts_with("<!--"))
+        .map(|line| line.trim_start_matches('#').trim().replace("**", ""))
 }
 
 /// Split structured reasoning-summary parts into the status header and renderable content.

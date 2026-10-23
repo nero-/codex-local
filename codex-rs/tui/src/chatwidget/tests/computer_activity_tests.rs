@@ -92,6 +92,7 @@ async fn computer_activity_keeps_reasoning_in_order_live_and_replayed() {
                         ReplayKind::ThreadSnapshot,
                     );
                 } else {
+                    handle_agent_reasoning_started(&mut chat, &summary);
                     chat.on_agent_reasoning_delta(summary);
                     chat.on_agent_reasoning_final();
                 }
@@ -101,23 +102,23 @@ async fn computer_activity_keeps_reasoning_in_order_live_and_replayed() {
                 chat.on_mcp_tool_call_completed(item);
             }
         }
-        assert!(drain_insert_history(&mut rx).is_empty());
-        // A visible message commits the whole group, including trailing reasoning.
-        chat.prepare_assistant_message();
+        chat.finalize_turn();
         let cells = std::iter::from_fn(|| rx.try_recv().ok())
             .filter_map(|event| match event {
                 AppEvent::InsertHistoryCell(cell) => Some(cell),
                 _ => None,
             })
             .collect::<Vec<_>>();
-        assert_eq!(cells.len(), 1);
-        let cell = &cells[0];
-        outputs.push(format!(
-            "Compact:\n{}\nExpanded:\n{}\nRaw:\n{}",
-            lines_to_single_string(&cell.display_lines(/*width*/ 80)),
-            lines_to_single_string(&cell.transcript_lines(/*width*/ 100)),
-            lines_to_single_string(&cell.raw_lines()),
-        ));
+        let mut rendered = String::new();
+        for cell in cells {
+            rendered.push_str(&format!(
+                "Compact:\n{}\nExpanded:\n{}\nRaw:\n{}\n",
+                lines_to_single_string(&cell.display_lines(/*width*/ 80)),
+                lines_to_single_string(&cell.transcript_lines(/*width*/ 100)),
+                lines_to_single_string(&cell.raw_lines()),
+            ));
+        }
+        outputs.push(rendered);
     }
     assert_eq!(outputs[0], outputs[1]);
     insta::assert_snapshot!(outputs[0]);

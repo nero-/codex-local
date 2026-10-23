@@ -199,6 +199,10 @@ pub(crate) fn plain_lines(lines: impl IntoIterator<Item = Line<'static>>) -> Vec
 pub(crate) trait HistoryCell: std::fmt::Debug + Send + Sync + Any {
     /// Retain reasoning inside an activity group, or return it for normal insertion.
     /// Call positions stay fixed as in-flight calls complete; other history cells decline it.
+    #[allow(
+        dead_code,
+        reason = "Retained for cells that group historical reasoning details."
+    )]
     fn append_reasoning(&mut self, cell: Box<dyn HistoryCell>) -> Result<(), Box<dyn HistoryCell>> {
         Err(cell)
     }

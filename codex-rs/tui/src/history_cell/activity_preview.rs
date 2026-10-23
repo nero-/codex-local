@@ -10,6 +10,8 @@ pub(crate) const DETAIL_PREVIEW_LINES: usize = 3;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ActivityDisclosure {
     Generic,
+    /// A reasoning block whose expanded presentation preserves Markdown structure.
+    Reasoning,
     /// Retained output lines not fully visible in the preview, excluding storage omissions.
     OutputLines(usize),
 }

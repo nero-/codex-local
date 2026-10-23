@@ -6956,7 +6956,10 @@ session_picker_view = "dense"
         .collect::<Vec<_>>()
         .join("\n");
 
-        assert_eq!(rendered, "• public summary\n  \n  raw reasoning content");
+        assert_eq!(
+            rendered,
+            "• Reasoning · public summary\n\n    raw reasoning content"
+        );
     }
 
     #[tokio::test]
