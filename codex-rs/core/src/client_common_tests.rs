@@ -268,3 +268,56 @@ fn serializes_flex_service_tier_when_set() {
         Some("flex")
     );
 }
+
+#[test]
+fn localize_agent_messages_uses_portable_assistant_output_text() {
+    let mut items = vec![ResponseItem::AgentMessage {
+        id: None,
+        author: "/root".to_string(),
+        recipient: "/root/task_1".to_string(),
+        content: vec![
+            codex_protocol::models::AgentMessageInputContent::InputText {
+                text: "the answer is 391".to_string(),
+            },
+            codex_protocol::models::AgentMessageInputContent::InputText {
+                text: "verified".to_string(),
+            },
+        ],
+        internal_chat_message_metadata_passthrough: None,
+    }];
+    localize_agent_messages(&mut items);
+    let ResponseItem::Message { role, content, .. } = &items[0] else {
+        panic!("expected a normal message");
+    };
+    assert_eq!(role, "assistant");
+    let ContentItem::OutputText { text, .. } = &content[0] else {
+        panic!("expected output text");
+    };
+    assert!(text.contains("Task name: /root/task_1"));
+    assert!(text.contains("Sender: /root"));
+    assert!(text.contains("the answer is 391\nverified"));
+}
+
+#[test]
+fn localize_agent_messages_marks_encrypted_payloads() {
+    let mut items = vec![ResponseItem::AgentMessage {
+        id: None,
+        author: "/a".to_string(),
+        recipient: "/b".to_string(),
+        content: vec![
+            codex_protocol::models::AgentMessageInputContent::EncryptedContent {
+                encrypted_content: "ciphertext".to_string(),
+            },
+        ],
+        internal_chat_message_metadata_passthrough: None,
+    }];
+    localize_agent_messages(&mut items);
+    let ResponseItem::Message { content, .. } = &items[0] else {
+        panic!("expected a normal message");
+    };
+    let ContentItem::OutputText { text, .. } = &content[0] else {
+        panic!("expected output text");
+    };
+    assert!(text.contains("encrypted inter-agent message omitted"));
+    assert!(!text.contains("ciphertext"));
+}

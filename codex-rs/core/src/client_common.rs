@@ -1,5 +1,6 @@
 pub use codex_api::ResponseEvent;
 use codex_protocol::error::Result;
+use codex_protocol::models::AgentMessageInputContent;
 use codex_protocol::models::BaseInstructions;
 use codex_protocol::models::ContentItem;
 use codex_protocol::models::DEFAULT_IMAGE_DETAIL;
@@ -63,6 +64,55 @@ impl Prompt {
         let mut input = self.input.clone();
         normalize_image_details(&mut input, model_info);
         input
+    }
+}
+
+/// Rewrites the provider-native inter-agent item into a normal assistant message.
+///
+/// OpenAI's Responses API accepts `agent_message`, but local OpenAI-compatible
+/// servers (vLLM and friends) validate input against the public schema and reject
+/// it. Subagents still produce these items, so a local provider would fail on the
+/// request immediately after a `spawn_agent` result. Rendering the item as an
+/// assistant `output_text` message preserves the author, recipient and payload
+/// while staying inside the portable schema.
+pub(crate) fn localize_agent_messages(items: &mut [ResponseItem]) {
+    for item in items {
+        let ResponseItem::AgentMessage {
+            author,
+            recipient,
+            content,
+            ..
+        } = item
+        else {
+            continue;
+        };
+        let mut parts = Vec::with_capacity(content.len());
+        for part in content.iter() {
+            match part {
+                AgentMessageInputContent::InputText { text } => parts.push(text.clone()),
+                AgentMessageInputContent::EncryptedContent { .. } => parts.push(
+                    "[encrypted inter-agent message omitted: this provider cannot decrypt it]"
+                        .to_string(),
+                ),
+            }
+        }
+        let text = format!(
+            "Message Type: MESSAGE\nTask name: {recipient}\nSender: {author}\nPayload:\n{}",
+            parts.join("\n")
+        );
+        *item = ResponseItem::Message {
+            id: None,
+            status: None,
+            encrypted_content: None,
+            role: "assistant".to_string(),
+            content: vec![ContentItem::OutputText {
+                text,
+                annotations: None,
+                logprobs: None,
+            }],
+            phase: None,
+            internal_chat_message_metadata_passthrough: None,
+        };
     }
 }
 
