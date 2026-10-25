@@ -192,6 +192,7 @@ fn rendering_preferences_default_individually_and_ignore_animation_switch() {
                 math: key != "math",
                 tables: key != "tables",
                 lists: key != "lists",
+                ..TuiRendering::default()
             }
         );
     }

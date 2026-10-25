@@ -202,6 +202,66 @@ pub(crate) fn new_view_image_tool_call(path: LegacyAppPathString) -> ViewImageHi
     }
 }
 
+/// A `view_image` cell that also reserves rows for inline terminal graphics.
+#[derive(Debug)]
+pub(crate) struct InlineImageHistoryCell {
+    filename: String,
+    path_label: String,
+    spec: crate::graphics::ImageSpec,
+}
+
+impl Drop for InlineImageHistoryCell {
+    fn drop(&mut self) {
+        crate::graphics::forget_image(self.spec.id);
+    }
+}
+
+impl HistoryCell for InlineImageHistoryCell {
+    fn display_lines(&self, width: u16) -> Vec<Line<'static>> {
+        let caption = vec![
+            "• ".dim(),
+            "Viewed image ".bold(),
+            self.filename.replace(['\n', '\r', '\t'], " ").dim(),
+        ];
+        let mut lines = vec![truncate_line_with_ellipsis_if_overflow(
+            caption.into(),
+            width as usize,
+        )];
+        lines.push(Line::from(crate::graphics::marker(&self.spec)));
+        for _ in 1..self.spec.rows {
+            lines.push(Line::from(""));
+        }
+        lines
+    }
+
+    fn transcript_lines(&self, width: u16) -> Vec<Line<'static>> {
+        let caption = Line::from(vec!["Viewed image ".bold(), self.path_label.clone().dim()]);
+        let mut lines =
+            PrefixedWrappedHistoryCell::new(caption, vec!["• ".dim()], "  ").display_lines(width);
+        lines.push(Line::from(crate::graphics::marker(&self.spec)));
+        for _ in 1..self.spec.rows {
+            lines.push(Line::from(""));
+        }
+        lines
+    }
+
+    fn raw_lines(&self) -> Vec<Line<'static>> {
+        vec![Line::from(format!("Viewed image {}", self.path_label))]
+    }
+}
+
+pub(crate) fn new_inline_view_image(path: LegacyAppPathString) -> Option<InlineImageHistoryCell> {
+    let uri = path.to_inferred_path_uri()?;
+    let local_path = uri.to_path_buf();
+    let spec = crate::graphics::register_image(&local_path)?;
+    let filename = uri.basename().unwrap_or_else(|| path.render_for_ui());
+    Some(InlineImageHistoryCell {
+        filename,
+        path_label: path.into_string(),
+        spec,
+    })
+}
+
 pub(crate) fn new_image_generation_call(
     call_id: String,
     status: &str,

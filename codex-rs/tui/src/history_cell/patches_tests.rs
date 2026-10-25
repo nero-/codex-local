@@ -90,3 +90,18 @@ fn failed_patch_keeps_diagnostics_beyond_the_legacy_preview() {
             .collect::<Vec<_>>()
     );
 }
+
+#[test]
+fn inline_view_image_reserves_graphics_rows() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let path = temp.path().join("pixel.png");
+    let image = image::RgbaImage::from_pixel(4, 4, image::Rgba([255, 0, 0, 255]));
+    image.save(&path).expect("write png");
+    let cell =
+        super::new_inline_view_image(codex_utils_path_uri::LegacyAppPathString::from_path(&path))
+            .expect("image cell");
+    let lines = cell.display_lines(80);
+    assert!(lines[0].to_string().contains("Viewed image"));
+    assert!(lines[1].to_string().contains('\u{e000}'));
+    assert!(lines.len() >= 2);
+}

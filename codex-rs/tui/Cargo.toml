@@ -90,6 +90,7 @@ lazy_static = { workspace = true }
 pathdiff = { workspace = true }
 pulldown-cmark = { workspace = true, features = ["html"] }
 rand = { workspace = true }
+ratatui-image = { workspace = true }
 ratatui = { workspace = true, features = [
     "scrolling-regions",
     "unstable-backend-writer",

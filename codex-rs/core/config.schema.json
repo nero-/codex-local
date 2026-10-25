@@ -4977,6 +4977,7 @@
             }
           ],
           "default": {
+            "inline_images": true,
             "lists": true,
             "math": true,
             "mermaid": true,
@@ -6157,6 +6158,11 @@
       "additionalProperties": false,
       "description": "Optional rich renderers. Disabled renderers preserve the original source.",
       "properties": {
+        "inline_images": {
+          "default": true,
+          "description": "Render images inline in the transcript using the terminal's graphics protocol.",
+          "type": "boolean"
+        },
         "lists": {
           "default": true,
           "description": "Render Markdown bullets and task-list markers as Unicode symbols.",

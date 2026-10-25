@@ -17,6 +17,8 @@ pub struct TuiRendering {
     pub tables: bool,
     /// Render Markdown bullets and task-list markers as Unicode symbols.
     pub lists: bool,
+    /// Render images inline in the transcript using the terminal's graphics protocol.
+    pub inline_images: bool,
 }
 
 impl Default for TuiRendering {
@@ -26,6 +28,7 @@ impl Default for TuiRendering {
             math: true,
             tables: true,
             lists: true,
+            inline_images: true,
         }
     }
 }

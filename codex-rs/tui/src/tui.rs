@@ -668,6 +668,7 @@ pub struct Tui {
     screen_size: ScreenSizePolicy,
     ambient_pet_image_state: crate::pets::PetImageRenderState,
     pet_picker_preview_image_state: crate::pets::PetImageRenderState,
+    graphics: crate::graphics::GraphicsState,
     alt_saved_viewport: Option<ratatui::layout::Rect>,
     #[cfg(unix)]
     suspend_context: SuspendContext,
@@ -745,6 +746,7 @@ impl Tui {
             screen_size: ScreenSizePolicy::default(),
             ambient_pet_image_state: crate::pets::PetImageRenderState::default(),
             pet_picker_preview_image_state: crate::pets::PetImageRenderState::default(),
+            graphics: crate::graphics::GraphicsState::new(),
             alt_saved_viewport: None,
             #[cfg(unix)]
             suspend_context: SuspendContext::new(),
@@ -1317,6 +1319,7 @@ impl Tui {
             }
 
             let terminal = &mut self.terminal;
+            let graphics = &mut self.graphics;
             if let Some(new_area) = pending_viewport_area.take() {
                 terminal.set_viewport_area(new_area);
                 terminal.clear()?;
@@ -1365,6 +1368,7 @@ impl Tui {
 
             terminal.draw_with_size(screen_size, |frame| {
                 draw_fn(frame);
+                graphics.render(frame);
             })
         })??;
         Ok(())
@@ -1466,6 +1470,7 @@ impl Tui {
             }
 
             let terminal = &mut self.terminal;
+            let graphics = &mut self.graphics;
             let needs_full_repaint = Self::update_inline_viewport_for_resize_reflow(
                 terminal,
                 height,
@@ -1503,6 +1508,7 @@ impl Tui {
 
             terminal.draw_with_size(screen_size, |frame| {
                 draw_fn(frame);
+                graphics.render(frame);
             })
         })??;
         Ok(())

@@ -14,7 +14,12 @@ impl ChatWidget {
 
     pub(super) fn on_view_image_tool_call(&mut self, path: LegacyAppPathString) {
         self.flush_answer_stream_with_separator();
-        self.add_to_history(history_cell::new_view_image_tool_call(path));
+        let inline = crate::markdown_render::preferences::current().inline_images;
+        if inline && let Some(cell) = history_cell::new_inline_view_image(path.clone()) {
+            self.add_to_history(cell);
+        } else {
+            self.add_to_history(history_cell::new_view_image_tool_call(path));
+        }
         self.request_redraw();
     }
 
