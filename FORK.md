@@ -75,6 +75,19 @@ Rules that keep merges cheap:
      emphasis, lists, tables, fenced-code highlighting, math, and Mermaid.
    - Reasoning received while a tool is still running is deferred and emitted
      immediately after that tool cell to preserve chronology.
+   - `codex exec --json` now emits a `reasoning` item from raw
+     `reasoning_text` content when the provider returns no summary, so local
+     vLLM reasoning is visible to both people and Harness² proposers.
+7. **Native Harness² recursion**
+   - `codex harness2 run` implements Propose–Probe–Compose and the
+     harness-improvement library for the Codex component tree.
+   - `codex harness2 library` prints a domain's adopted harnesses and lessons.
+   - See `docs/harness2.md` for the surface, evidence layout, and options.
+8. **Rich local defaults**
+   - The installed config enables fullscreen transcript, Markdown tables, math,
+     Mermaid, and raw reasoning blocks, and sets `tui.pet = "disabled"`.
+   - `codex models refresh` already discovers the local model and its 1M context
+     window; no second launcher is required.
 
 Build/check while iterating:
 
@@ -82,6 +95,8 @@ Build/check while iterating:
 cd codex-rs
 cargo build -p codex-cli --bin codex
 cargo test -p codex-model-provider-info
+cargo test -p codex-harness2
+cargo test -p codex-exec --lib reasoning_without_a_summary_emits_raw_content
 ```
 
 ## Install into `~/.codex`
@@ -93,7 +108,7 @@ fork. Back up the config first; keep the old binary if you want a rollback.
 cd codex-rs
 cargo build --release -p codex-cli --bin codex
 
-CODEX_BIN="$(readlink -f ~/.local/bin/codex)"
+CODEX_BIN="$(readlink -f "$(command -v codex)")"
 cp -p ~/.codex/config.toml ~/.codex/config.toml.chatgpt-backup-$(date +%Y%m%d-%H%M%S)
 install -m 755 target/release/codex "$CODEX_BIN"
 ```
@@ -113,6 +128,7 @@ model_catalog_json = "/Users/you/.codex/model-catalog.json"
 [tui]
 fullscreen_transcript = true
 raw_output_mode = false
+pet = "disabled"
 
 [tui.rendering]
 mermaid = true
@@ -122,7 +138,7 @@ lists = true
 
 [model_providers.local-default]
 name = "local"
-base_url = "http://127.0.0.1:8000/v1"
+base_url = "http://127.0.0.1:8000/v1" # or your LAN endpoint, e.g. http://192.168.50.219:8015/v1
 wire_api = "responses"
 requires_openai_auth = false
 

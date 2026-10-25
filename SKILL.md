@@ -7,7 +7,7 @@ metadata:
 
 # codex-local maintenance
 
-Maintain `/Users/jg/Code/codex-local`, the CLI-only local-model fork installed as
+Maintain `/home/kal/Agent/Harness/codex-local`, the CLI-only local-model fork installed as
 **`codex`**. The fork is Apache-2.0; do not ship OpenAI marks or imply endorsement.
 
 ## Hard rules
@@ -24,12 +24,12 @@ Maintain `/Users/jg/Code/codex-local`, the CLI-only local-model fork installed a
 
 | Item | Value |
 | --- | --- |
-| Repo | `/Users/jg/Code/codex-local` |
+| Repo | `/home/kal/Agent/Harness/codex-local` |
 | Origin | `https://github.com/nero-/codex-local` |
 | Upstream | `https://github.com/openai/codex` |
 | Working branch | `local` (default branch) |
-| Installed binary | `~/.codex/packages/standalone/releases/0.163.0-aarch64-apple-darwin/bin/codex` |
-| CLI symlink | `~/.local/bin/codex` → installed binary |
+| Installed binary | `~/.local/share/mise/installs/codex/0.163.0/bin/codex` (first on PATH) |
+| CLI symlink | `~/.local/bin/codex` → `~/.codex/packages/standalone/current/bin/codex` |
 | Config | `~/.codex/config.toml` |
 | Catalog | `~/.codex/model-catalog.json` (real file) |
 | Model discovery | `codex models refresh` / `codex models list` |
@@ -68,6 +68,14 @@ Only these upstream seams are intentionally modified:
    - Standalone reasoning cells are kept separate from tool groups. Reasoning
      that arrives while a tool is still active is deferred and flushed directly
      after that tool cell.
+   - `codex exec --json` emits raw `reasoning_text` as a `reasoning` item when
+     the provider supplies no summary. This is what lets local vLLM reasoning
+     appear in Harness² trajectories.
+7. `codex-rs/harness2` plus `codex harness2` in `codex-rs/cli`
+   - Native Propose–Probe–Compose task recursion, parallel and sequential.
+   - Per-domain experience library with adopted harnesses and `EXPERIENCE.md`.
+   - Rollouts run as child `codex exec --json` processes in isolated workspace
+     copies; see `docs/harness2.md`.
 
 Do not rename the local provider away from a `local*` prefix without updating
 that normalization; vLLM rejects `minimal`/`medium` with HTTP 400.
@@ -77,7 +85,7 @@ that normalization; vLLM rejects `minimal`/`medium` with HTTP 400.
 ## Merge upstream correctly
 
 ```bash
-cd /Users/jg/Code/codex-local
+cd /home/kal/Agent/Harness/codex-local
 git status --short                 # must be clean
 git remote -v                      # origin=fork, upstream=openai/codex
 git fetch upstream --tags
@@ -110,12 +118,12 @@ installed release directory changes.
 Use the already-installed toolchain directly:
 
 ```bash
-export PATH="$HOME/.rustup/toolchains/stable-aarch64-apple-darwin/bin:$PATH"
-export CARGO_HOME=/Users/jg/Code/.codex-cargo-home
-cd /Users/jg/Code/codex-local/codex-rs
+cd /home/kal/Agent/Harness/codex-local/codex-rs
 
 cargo check -p codex-cli
 cargo test -p codex-model-provider-info
+cargo test -p codex-harness2
+cargo test -p codex-exec --lib reasoning_without_a_summary_emits_raw_content
 ```
 
 Release build (LTO off keeps memory sane; the link step still spikes and is not a
@@ -129,12 +137,9 @@ CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16 \
 cargo build --release -p codex-cli --bin codex -j 8
 ```
 
-Expected: `target/release/codex` built in roughly 6–8 minutes. Cargo 1.98 touches
-`codex-rs/Cargo.lock`; revert that churn before committing:
-
-```bash
-git checkout -- codex-rs/Cargo.lock
-```
+Expected: `target/release/codex` built in roughly 6–8 minutes. Commit
+`codex-rs/Cargo.lock` only when the change intentionally adds or updates a
+dependency (as the `codex-harness2` crate does); otherwise revert churn.
 
 The `target/` directory is large (tens of GB); it is gitignored.
 
@@ -143,15 +148,16 @@ The `target/` directory is large (tens of GB); it is gitignored.
 Never overwrite an unexpected path.
 
 ```bash
-cd /Users/jg/Code/codex-local/codex-rs
-CODEX_BIN="$(readlink -f "$HOME/.local/bin/codex")"
+cd /home/kal/Agent/Harness/codex-local/codex-rs
+CODEX_BIN="$(readlink -f "$(command -v codex)")"
 case "$CODEX_BIN" in
-  "$HOME/.codex/packages/standalone/"*) ;;
+  "$HOME/.local/share/mise/installs/codex/"* | "$HOME/.codex/packages/standalone/"*) ;;
   *) echo "unexpected codex path: $CODEX_BIN" >&2; exit 1 ;;
 esac
 
 cp -p "$HOME/.codex/config.toml" \
   "$HOME/.codex/config.toml.chatgpt-backup-$(date +%Y%m%d-%H%M%S)"
+cp -p "$CODEX_BIN" "$CODEX_BIN.upstream-$(date +%Y%m%d-%H%M%S)"
 install -m 755 target/release/codex "$CODEX_BIN"
 codex --version
 ```
@@ -171,11 +177,12 @@ model_reasoning_effort = "high"
 model_reasoning_summary = "detailed"
 show_raw_agent_reasoning = true
 check_for_update_on_startup = false
-model_catalog_json = "/Users/jg/.codex/model-catalog.json"
+model_catalog_json = "/home/kal/.codex/model-catalog.json"
 
 [tui]
 fullscreen_transcript = true
 raw_output_mode = false
+pet = "disabled"
 
 [tui.rendering]
 mermaid = true
@@ -236,6 +243,10 @@ codex exec --sandbox read-only --skip-git-repo-check "Say OK." </dev/null
 - In the TUI, reasoning appears as a collapsed `Reasoning` block. Press `F4`,
   then `Enter`, or click `+ Show reasoning`, to expand it; press `Enter` again to
   collapse it. `Ctrl+T` shows the full transcript.
+- `codex exec --json` must contain a `reasoning` item on a prompt that triggers
+  thinking, and `reasoning_output_tokens` must be non-zero.
+- `codex harness2 run --task ... --k 1 --dry-run` resolves; a real run writes
+  `result.json`, `rollouts/`, `work/adopted/`, and publishes produced files.
 - Assistant and expanded reasoning Markdown should render code fences, tables,
   lists, math, and Mermaid without literal Markdown delimiters.
 - If testing TUI with a pty, pass `--no-daemon` only as a diagnostic; the shipped
@@ -249,8 +260,13 @@ codex exec --sandbox read-only --skip-git-repo-check "Say OK." </dev/null
 - `apply_patch` unavailable: Codex sends it as a custom/freeform tool; this vLLM
   build drops it. The model edits via shell instead.
 - `previous_response_id`/`store`: unsupported (404); Codex must stay stateless.
-- `codex exec --json` has no raw reasoning; JSON serializes summaries only.
-  Do not "fix" this by reintroducing a bridge unless the user asks.
+- `codex exec --json` emits summaries first, then raw `reasoning_text` when no
+  summary exists. If a future upstream change drops raw content again, fix the
+  `ThreadItem::Reasoning` mapping in
+  `codex-rs/exec/src/event_processor_with_jsonl_output.rs`; do not add a bridge.
+- Harness² editor sessions are agentic `codex exec` children. They need the same
+  provider, catalog, and `CODEX_HOME` as the parent; do not run them with
+  `--ignore-user-config`.
 - Build memory spike: compile/link, not a leak; check `memory_pressure` and swap
   before investigating.
 - Upstream tag merge conflicts often land in `cli`/`core`/`config`; keep local
@@ -260,7 +276,7 @@ codex exec --sandbox read-only --skip-git-repo-check "Say OK." </dev/null
 ## Commit and push
 
 ```bash
-cd /Users/jg/Code/codex-local
+cd /home/kal/Agent/Harness/codex-local
 git status --short
 # never stage codex-rs/Cargo.lock churn or target artifacts
 git add <specific files>
@@ -276,5 +292,4 @@ update `FORK.md` and this skill in the same commit.
 - Restore the newest `~/.codex/config.toml.chatgpt-backup-*` if config is wrong.
 - Reinstall upstream Codex from `https://chatgpt.com/codex/install.sh` only if the
   user explicitly wants to abandon the fork.
-- The original upstream binary was intentionally deleted; there is no local
-  binary backup.
+- Keep the `*.upstream-*` copy made by the install step; it is the rollback.
