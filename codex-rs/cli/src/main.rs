@@ -67,6 +67,7 @@ mod exec_server_args_tests;
 mod exec_server_auth;
 mod exec_server_command;
 mod exec_server_telemetry;
+mod harness2_cmd;
 mod marketplace_cmd;
 mod mcp_cmd;
 mod mcp_login;
@@ -158,6 +159,9 @@ enum Subcommand {
 
     /// Discover local models and manage the model catalog.
     Models(models_cmd::ModelsCommand),
+
+    /// Recursively improve the harness for one task (Harness²).
+    Harness2(harness2_cmd::Harness2Command),
 
     /// Run a code review non-interactively.
     Review(ReviewCommand),
@@ -1168,6 +1172,14 @@ async fn cli_main(
                 root_config_overrides.clone(),
             );
             codex_exec::run_main(exec_cli, arg0_paths.clone()).await?;
+        }
+        Some(Subcommand::Harness2(command)) => {
+            reject_remote_mode_for_subcommand(
+                root_remote.as_deref(),
+                root_remote_auth_token_env.as_deref(),
+                "harness2",
+            )?;
+            harness2_cmd::run(command).await?;
         }
         Some(Subcommand::Models(command)) => {
             reject_remote_mode_for_subcommand(
@@ -2294,6 +2306,7 @@ fn unsupported_subcommand_name_for_strict_config(
         Some(Subcommand::Cloud(_)) => Some("cloud"),
         Some(Subcommand::Sandbox(_)) => Some("sandbox"),
         Some(Subcommand::Models(_)) => Some("models"),
+        Some(Subcommand::Harness2(_)) => Some("harness2"),
         Some(Subcommand::Debug(_)) => Some("debug"),
         Some(Subcommand::Execpolicy(_)) => Some("execpolicy"),
         Some(Subcommand::Apply(_)) => Some("apply"),
