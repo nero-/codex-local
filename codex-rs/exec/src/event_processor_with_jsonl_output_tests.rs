@@ -143,3 +143,27 @@ fn mcp_tool_call_result_preserves_meta_in_jsonl_event() {
     );
     assert!(serialized["item"]["result"].get("meta").is_none());
 }
+
+#[test]
+fn reasoning_without_a_summary_emits_raw_content() {
+    let mut processor = EventProcessorWithJsonOutput::new(/*last_message_path*/ None);
+    let collected = processor.collect_thread_events(ServerNotification::ItemCompleted(
+        codex_app_server_protocol::ItemCompletedNotification {
+            item: ThreadItem::Reasoning {
+                id: "reasoning-1".to_string(),
+                summary: Vec::new(),
+                content: vec!["check the units before multiplying".to_string()],
+            },
+            thread_id: "thread-1".to_string(),
+            turn_id: "turn-1".to_string(),
+            completed_at_ms: 0,
+        },
+    ));
+    let ThreadEvent::ItemCompleted(ItemCompletedEvent { item }) = &collected.events[0] else {
+        panic!("expected item.completed event");
+    };
+    let ThreadItemDetails::Reasoning(reasoning) = &item.details else {
+        panic!("expected reasoning item");
+    };
+    assert_eq!(reasoning.text, "check the units before multiplying");
+}

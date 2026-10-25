@@ -149,8 +149,17 @@ impl EventProcessorWithJsonOutput {
                 id: make_id(),
                 details: ThreadItemDetails::AgentMessage(AgentMessageItem { text }),
             }),
-            ThreadItem::Reasoning { summary, .. } => {
-                let text = summary.join("\n");
+            ThreadItem::Reasoning {
+                summary, content, ..
+            } => {
+                // Local providers (vLLM, etc.) return raw reasoning text and no summary.
+                // Prefer the summary when present, otherwise expose the raw block so
+                // `exec --json` consumers see the same reasoning the TUI renders.
+                let text = if summary.iter().any(|part| !part.trim().is_empty()) {
+                    summary.join("\n")
+                } else {
+                    content.join("\n")
+                };
                 if text.trim().is_empty() {
                     return None;
                 }
@@ -351,8 +360,11 @@ impl EventProcessorWithJsonOutput {
     }
 
     fn map_completed_item_mut(&mut self, item: ThreadItem) -> Option<ExecThreadItem> {
-        if let ThreadItem::Reasoning { summary, .. } = &item
+        if let ThreadItem::Reasoning {
+            summary, content, ..
+        } = &item
             && summary.join("\n").trim().is_empty()
+            && content.join("\n").trim().is_empty()
         {
             return None;
         }
