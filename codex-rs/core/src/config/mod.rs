@@ -1635,16 +1635,35 @@ impl Config {
     }
 
     pub(crate) fn multi_agent_version_override(&self) -> Option<MultiAgentVersion> {
-        if self.features.enabled(Feature::MultiAgentV2) {
-            Some(MultiAgentVersion::V2)
-        } else if !self.agents_enabled {
-            Some(MultiAgentVersion::Disabled)
-        } else {
-            None
+        if !self.agents_enabled {
+            return Some(MultiAgentVersion::Disabled);
         }
+        if self.features.enabled(Feature::MultiAgentV2) {
+            // Local OpenAI-compatible backends cannot speak the V2 provider-native
+            // `agent_message` item. Keep every local provider on V1 even when the
+            // V2 feature or a model catalog asks for it.
+            return Some(if self.is_local_provider() {
+                MultiAgentVersion::V1
+            } else {
+                MultiAgentVersion::V2
+            });
+        }
+        None
     }
 
     pub(crate) fn multi_agent_version_from_features(&self) -> MultiAgentVersion {
+        if !self.agents_enabled {
+            return MultiAgentVersion::Disabled;
+        }
+        if self.is_local_provider() {
+            return if self.features.enabled(Feature::Collab)
+                || self.features.enabled(Feature::MultiAgentV2)
+            {
+                MultiAgentVersion::V1
+            } else {
+                MultiAgentVersion::Disabled
+            };
+        }
         self.multi_agent_version_override().unwrap_or_else(|| {
             if self.features.enabled(Feature::Collab) {
                 MultiAgentVersion::V1
@@ -1654,10 +1673,29 @@ impl Config {
         })
     }
 
+    fn is_local_provider(&self) -> bool {
+        self.model_provider
+            .name
+            .to_ascii_lowercase()
+            .starts_with("local")
+    }
+
     pub(crate) fn multi_agent_version_for_model(
         &self,
         model_multi_agent_version: Option<MultiAgentVersion>,
     ) -> MultiAgentVersion {
+        if !self.agents_enabled {
+            return MultiAgentVersion::Disabled;
+        }
+        if self.is_local_provider() {
+            return if self.features.enabled(Feature::Collab)
+                || self.features.enabled(Feature::MultiAgentV2)
+            {
+                MultiAgentVersion::V1
+            } else {
+                MultiAgentVersion::Disabled
+            };
+        }
         self.multi_agent_version_override()
             .or(model_multi_agent_version)
             .unwrap_or_else(|| self.multi_agent_version_from_features())

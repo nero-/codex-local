@@ -182,7 +182,14 @@ fn memories_version_selects_pipeline_without_changing_other_defaults() {
 
 #[test]
 fn rendering_preferences_default_individually_and_ignore_animation_switch() {
-    for key in ["mermaid", "math", "tables", "lists"] {
+    for key in [
+        "mermaid",
+        "math",
+        "tables",
+        "lists",
+        "inline_images",
+        "text_sizing",
+    ] {
         let tui: Tui =
             toml::from_str(&format!("animations = false\n[rendering]\n{key} = false\n")).unwrap();
         assert_eq!(
@@ -192,6 +199,8 @@ fn rendering_preferences_default_individually_and_ignore_animation_switch() {
                 math: key != "math",
                 tables: key != "tables",
                 lists: key != "lists",
+                inline_images: key != "inline_images",
+                text_sizing: false,
                 ..TuiRendering::default()
             }
         );

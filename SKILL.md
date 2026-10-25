@@ -77,20 +77,28 @@ Only these upstream seams are intentionally modified:
    - Rollouts run as child `codex exec --json` processes in isolated workspace
      copies; see `docs/harness2.md`.
 8. Local multi-agent compatibility
-   - `codex-rs/cli/src/models_cmd.rs` leaves `multi_agent_version` unset so the
-     default `multi_agent` feature uses V1. Do not put `"v2"` in generated local
-     catalogs unless V2 has been retested against the endpoint.
-   - `codex-rs/core/src/client_common.rs` rewrites `ResponseItem::AgentMessage`
-     to a portable assistant `output_text` message for non-OpenAI providers.
-     Without it, V2 child results produce `agent_message` input items that vLLM
-     rejects with a 197-error validation response.
+   - `Config::multi_agent_version_for_model` forces V1 for every provider whose
+     name starts with `local`. This overrides both a catalog
+     `multi_agent_version` and `features.multi_agent_v2`, so there is one local
+     subagent protocol to maintain.
+   - `codex-rs/cli/src/models_cmd.rs` leaves `multi_agent_version` unset.
+   - `codex-rs/core/src/client_common.rs` still rewrites
+     `ResponseItem::AgentMessage` to a portable assistant `output_text` message
+     for non-OpenAI providers, as a second line of defence if a future path
+     bypasses the V1 override.
    - The generated catalog advertises `"input_modalities": ["text", "image"]`
      and `supports_image_detail_original`.
-9. Inline terminal graphics
+9. Inline terminal graphics and text sizing
    - `codex-rs/tui/src/graphics.rs` scans transcript markers and renders
      `view_image` cells with `ratatui-image` (Kitty placeholders, Sixel, or
      halfblocks).
-   - `tui.rendering.inline_images` toggles it; it is on by default.
+   - `tui.rendering.inline_images` toggles images.
+   - `tui.rendering.text_sizing` rewrites bold+underlined H1 rows as Kitty
+     OSC 66 `s=2` text, removing the `# ` prefix. It skips wrapped headings,
+     headings whose 2x text would overflow, and headings on the last viewport row.
+     Enable on Kitty/Tern only; WezTerm/Ghostty do not render OSC 66. Like
+     inline images, sizing applies in the owned/fullscreen transcript; raw
+     scrollback stays 1x.
 
 Do not rename the local provider away from a `local*` prefix without updating
 that normalization; vLLM rejects `minimal`/`medium` with HTTP 400.
@@ -202,6 +210,7 @@ pet = "disabled"
 
 [tui.rendering]
 inline_images = true
+text_sizing = true
 mermaid = true
 math = true
 tables = true
@@ -215,6 +224,7 @@ requires_openai_auth = false
 
 [features]
 daemon_auto_start = false
+multi_agent_v2 = false
 
 # Local web search (no OpenAI-hosted search).
 [mcp_servers.ddg]
@@ -276,9 +286,14 @@ codex exec --sandbox read-only --skip-git-repo-check "Say OK." </dev/null
 - In a Kitty terminal, a `view_image` cell must show the image instead of a
   private-use marker. `tui.rendering.inline_images = false` restores the text
   caption only.
-- Kitty OSC 66 text sizing is not implemented: Markdown headings remain ANSI
-  text. Do not claim omp-style 2x headings until a text-sizing layout layer
-  exists.
+- V1 subagents do not inherit parent history by default: `fork_context` defaults
+  to false. If a child sees the parent prompt, the spawn call used
+  `fork_context: true` or the parent copied context into the spawn message.
+- `fork_context: true` fails with `--ephemeral` (`no rollout found for thread`).
+  Use a persisted session when testing history forks.
+- Permission inheritance was verified end-to-end: read-only children cannot
+  write anywhere, workspace-write children can write the same roots as the
+  parent, and approvals are inherited from the parent turn.
 - Assistant and expanded reasoning Markdown should render code fences, tables,
   lists, math, and Mermaid without literal Markdown delimiters.
 - If testing TUI with a pty, pass `--no-daemon` only as a diagnostic; the shipped

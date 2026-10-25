@@ -10,6 +10,7 @@ use codex_terminal_detection::TerminalName;
 use codex_terminal_detection::terminal_info;
 use ratatui::layout::Rect;
 use ratatui::layout::Size;
+use ratatui::style::Modifier;
 use ratatui::widgets::Widget;
 use ratatui_image::Image;
 use ratatui_image::Resize;
@@ -152,6 +153,11 @@ impl GraphicsState {
     }
 
     fn render_buffer(&mut self, area: Rect, buffer: &mut ratatui::buffer::Buffer) {
+        let text_sizing =
+            crate::markdown_render::preferences::current().text_sizing && supports_text_sizing();
+        if text_sizing {
+            render_text_sizing(area, buffer);
+        }
         let mut markers = Vec::new();
         for y in area.top()..area.bottom() {
             for x in area.left()..area.right() {
@@ -226,6 +232,79 @@ impl GraphicsState {
     }
 }
 
+/// Kitty's OSC 66 text-sizing protocol wraps text in a zero-width escape. Ratatui
+/// writes the cell symbol verbatim, so a heading row can carry the sequence in its
+/// first cell while the layout still reserves the original row.
+fn render_text_sizing(area: Rect, buffer: &mut ratatui::buffer::Buffer) {
+    for y in area.top()..area.bottom() {
+        // Kitty's 2x block occupies two terminal rows. Only rewrite an H1 when the
+        // following row is blank (Markdown already leaves one after a heading) and
+        // both rows are inside the viewport.
+        if y.saturating_add(1) >= area.bottom() || !row_is_blank(buffer, y + 1, area) {
+            continue;
+        }
+        for x in area.left()..area.right() {
+            let Some(first) = buffer.cell((x, y)) else {
+                continue;
+            };
+            if first.symbol() != "#"
+                || !first
+                    .modifier
+                    .contains(Modifier::BOLD | Modifier::UNDERLINED)
+            {
+                continue;
+            }
+            let Some(space) = buffer.cell((x.saturating_add(1), y)) else {
+                continue;
+            };
+            if space.symbol() != " " {
+                continue;
+            }
+            let max_cells = u32::from(area.right().saturating_sub(x) / 2).max(1);
+            let mut text = String::new();
+            let mut skip_continuations = 0;
+            for xx in (x.saturating_add(2))..area.right() {
+                let Some(cell) = buffer.cell((xx, y)) else {
+                    break;
+                };
+                if skip_continuations > 0 {
+                    skip_continuations -= 1;
+                    continue;
+                }
+                let symbol = cell.symbol();
+                let width = unicode_width::UnicodeWidthStr::width(symbol);
+                if width > 1 {
+                    skip_continuations = width - 1;
+                }
+                text.push_str(symbol);
+            }
+            let text = text.trim_end();
+            if text.is_empty() || unicode_width::UnicodeWidthStr::width(text) > max_cells as usize {
+                // A heading that needs the full width stays at 1x rather than losing
+                // its middle section when the 2x block would not fit.
+                continue;
+            }
+            clear_row_from(buffer, x, y, area.right());
+            if let Some(cell) = buffer.cell_mut((x, y)) {
+                cell.set_symbol(&format!("\x1b]66;s=2;{text}\x1b\\"));
+            }
+            break;
+        }
+    }
+}
+
+fn row_is_blank(buffer: &ratatui::buffer::Buffer, y: u16, area: Rect) -> bool {
+    (area.left()..area.right()).all(|x| buffer.cell((x, y)).is_none_or(|cell| cell.symbol() == " "))
+}
+
+fn supports_text_sizing() -> bool {
+    // Kitty implements OSC 66; Tern presents Kitty's graphics/text capabilities and
+    // sets KITTY_WINDOW_ID. WezTerm/Ghostty do not render it, so do not enable it there.
+    std::env::var_os("KITTY_WINDOW_ID").is_some()
+        || std::env::var("TERM").is_ok_and(|term| term.to_ascii_lowercase().contains("kitty"))
+        || std::env::var("TERM_PROGRAM").is_ok_and(|program| program.eq_ignore_ascii_case("tern"))
+}
+
 fn clear_row_from(buffer: &mut ratatui::buffer::Buffer, start: u16, y: u16, end: u16) {
     for x in start..end {
         if let Some(cell) = buffer.cell_mut((x, y)) {
@@ -281,6 +360,30 @@ mod tests {
             });
         assert!(rendered, "image cells were not written");
         forget_image(spec.id);
+    }
+
+    #[test]
+    fn h1_row_becomes_an_osc66_sequence() {
+        let mut buffer = ratatui::buffer::Buffer::empty(Rect::new(0, 0, 40, 5));
+        buffer.set_string(
+            0,
+            0,
+            "# Heading",
+            ratatui::style::Style::new().bold().underlined(),
+        );
+        buffer.set_string(0, 2, "## Not H1", ratatui::style::Style::new().bold());
+        buffer.set_string(
+            0,
+            3,
+            "# This heading is much too long for a 2x block",
+            ratatui::style::Style::new().bold().underlined(),
+        );
+        render_text_sizing(Rect::new(0, 0, 40, 5), &mut buffer);
+        let heading = buffer.cell((0, 0)).expect("heading cell").symbol();
+        assert!(heading.contains("\x1b]66;s=2;Heading"), "{heading:?}");
+        assert_eq!(buffer.cell((1, 0)).expect("cleared cell").symbol(), " ");
+        assert_eq!(buffer.cell((0, 2)).expect("h2 cell").symbol(), "#");
+        assert_eq!(buffer.cell((0, 3)).expect("long h1 cell").symbol(), "#");
     }
 
     #[test]

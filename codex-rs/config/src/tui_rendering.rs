@@ -19,6 +19,8 @@ pub struct TuiRendering {
     pub lists: bool,
     /// Render images inline in the transcript using the terminal's graphics protocol.
     pub inline_images: bool,
+    /// Render Markdown H1 headings at 2x scale with Kitty's OSC 66 text-sizing protocol.
+    pub text_sizing: bool,
 }
 
 impl Default for TuiRendering {
@@ -29,6 +31,7 @@ impl Default for TuiRendering {
             tables: true,
             lists: true,
             inline_images: true,
+            text_sizing: false,
         }
     }
 }

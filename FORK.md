@@ -89,15 +89,20 @@ Rules that keep merges cheap:
    - `codex models refresh` already discovers the local model and its 1M context
      window; no second launcher is required.
 9. **Local multi-agent compatibility**
-   - The generated catalog leaves `multi_agent_version` unset, so the default
-     `multi_agent` feature selects mature V1 subagents. V2 remains opt-in with
-     `features.multi_agent_v2` (or a catalog value of `v2`).
+   - Every local provider now forces `MultiAgentVersion::V1` in
+     `Config::multi_agent_version_for_model`, regardless of a catalog value or
+     `features.multi_agent_v2`. V1 is the only local subagent path; the installed
+     config also sets `multi_agent_v2 = false`.
    - Non-OpenAI providers rewrite `ResponseItem::AgentMessage` into an assistant
      `output_text` message. V2 uses that provider-native item for child results;
      vLLM validates the public schema and otherwise rejects the next request
      with hundreds of `agent_message` validation errors.
    - The local catalog advertises `text` and `image` input, so `view_image` and
      `-i/--image` work against a multimodal endpoint.
+   - V1 `fork_context` defaults to `false`: children start with only their spawn
+     message. `fork_context: true` copies parent history and fails under
+     `--ephemeral` because there is no rollout to fork. Sandbox, approval policy,
+     cwd, and workspace roots are copied from the parent turn.
 10. **Inline terminal graphics**
    - `view_image` history cells reserve rows and render the actual image with
      `ratatui-image`: Kitty graphics with Unicode placeholders, Sixel, or
@@ -106,9 +111,13 @@ Rules that keep merges cheap:
      painted once at a fixed cursor position. They require the owned/fullscreen
      transcript (the default); raw scrollback mode has no visible buffer to map.
    - Controlled by `tui.rendering.inline_images` (default `true`).
-   - Markdown itself remains ANSI text. Kitty OSC 66 text sizing (for 2x H1
-     headings) is not part of Codex's ratatui renderer yet; adding it requires a
-     text-sizing layer that accounts for the doubled cell width in layout.
+   - `tui.rendering.text_sizing = true` renders Markdown H1 rows at 2x scale
+     with Kitty's OSC 66 protocol. It only rewrites a non-wrapped heading whose
+     2x text fits the remaining row and whose following row is blank, so text is
+     never truncated and the two-row block does not paint over the composer.
+   - Both options are opt-in at the repository level; the installed local config
+     enables them for Tern/Kitty. Text sizing, like inline images, applies to the
+     owned/fullscreen transcript; raw terminal scrollback stays 1x.
 
 Build/check while iterating:
 

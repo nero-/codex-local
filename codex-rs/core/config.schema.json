@@ -4981,7 +4981,8 @@
             "lists": true,
             "math": true,
             "mermaid": true,
-            "tables": true
+            "tables": true,
+            "text_sizing": false
           },
           "description": "Rich content rendering. Independent of animations and visual effects."
         },
@@ -6181,6 +6182,11 @@
         "tables": {
           "default": true,
           "description": "Render pipe tables, including tables inside Markdown fences.",
+          "type": "boolean"
+        },
+        "text_sizing": {
+          "default": false,
+          "description": "Render Markdown H1 headings at 2x scale with Kitty's OSC 66 text-sizing protocol.",
           "type": "boolean"
         }
       },
