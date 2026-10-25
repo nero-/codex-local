@@ -76,6 +76,21 @@ Only these upstream seams are intentionally modified:
    - Per-domain experience library with adopted harnesses and `EXPERIENCE.md`.
    - Rollouts run as child `codex exec --json` processes in isolated workspace
      copies; see `docs/harness2.md`.
+8. Local multi-agent compatibility
+   - `codex-rs/cli/src/models_cmd.rs` leaves `multi_agent_version` unset so the
+     default `multi_agent` feature uses V1. Do not put `"v2"` in generated local
+     catalogs unless V2 has been retested against the endpoint.
+   - `codex-rs/core/src/client_common.rs` rewrites `ResponseItem::AgentMessage`
+     to a portable assistant `output_text` message for non-OpenAI providers.
+     Without it, V2 child results produce `agent_message` input items that vLLM
+     rejects with a 197-error validation response.
+   - The generated catalog advertises `"input_modalities": ["text", "image"]`
+     and `supports_image_detail_original`.
+9. Inline terminal graphics
+   - `codex-rs/tui/src/graphics.rs` scans transcript markers and renders
+     `view_image` cells with `ratatui-image` (Kitty placeholders, Sixel, or
+     halfblocks).
+   - `tui.rendering.inline_images` toggles it; it is on by default.
 
 Do not rename the local provider away from a `local*` prefix without updating
 that normalization; vLLM rejects `minimal`/`medium` with HTTP 400.
@@ -178,6 +193,7 @@ model_reasoning_summary = "detailed"
 show_raw_agent_reasoning = true
 check_for_update_on_startup = false
 model_catalog_json = "/home/kal/.codex/model-catalog.json"
+web_search = "disabled"
 
 [tui]
 fullscreen_transcript = true
@@ -185,6 +201,7 @@ raw_output_mode = false
 pet = "disabled"
 
 [tui.rendering]
+inline_images = true
 mermaid = true
 math = true
 tables = true
@@ -198,6 +215,13 @@ requires_openai_auth = false
 
 [features]
 daemon_auto_start = false
+
+# Local web search (no OpenAI-hosted search).
+[mcp_servers.ddg]
+command = "uvx"
+args = ["duckduckgo-mcp-server"]
+startup_timeout_sec = 90
+tool_timeout_sec = 120
 ```
 
 Why these matter:
@@ -247,6 +271,14 @@ codex exec --sandbox read-only --skip-git-repo-check "Say OK." </dev/null
   thinking, and `reasoning_output_tokens` must be non-zero.
 - `codex harness2 run --task ... --k 1 --dry-run` resolves; a real run writes
   `result.json`, `rollouts/`, `work/adopted/`, and publishes produced files.
+- `codex exec` with `--image` must describe a test PNG when the endpoint supports
+  vision.
+- In a Kitty terminal, a `view_image` cell must show the image instead of a
+  private-use marker. `tui.rendering.inline_images = false` restores the text
+  caption only.
+- Kitty OSC 66 text sizing is not implemented: Markdown headings remain ANSI
+  text. Do not claim omp-style 2x headings until a text-sizing layout layer
+  exists.
 - Assistant and expanded reasoning Markdown should render code fences, tables,
   lists, math, and Mermaid without literal Markdown delimiters.
 - If testing TUI with a pty, pass `--no-daemon` only as a diagnostic; the shipped
@@ -264,6 +296,19 @@ codex exec --sandbox read-only --skip-git-repo-check "Say OK." </dev/null
   summary exists. If a future upstream change drops raw content again, fix the
   `ThreadItem::Reasoning` mapping in
   `codex-rs/exec/src/event_processor_with_jsonl_output.rs`; do not add a bridge.
+- Subagents produce `agent_message` validation errors under V2: the catalog must
+  not force V2. Prefer V1 (`multi_agent` feature, default true). The portable
+  `AgentMessage` rewrite in `client_common.rs` is the safety net for explicit V2.
+- Hosted `web_search` is unavailable on vLLM (`alpha/search` is not implemented).
+  Keep `web_search = "disabled"` and use a local MCP search server, e.g.
+  `[mcp_servers.ddg] command = "uvx" args = ["duckduckgo-mcp-server"]`. Do not
+  enable OpenAI-hosted search.
+- `view_image` needs image modalities in the catalog. If the tool refuses with
+  "image inputs aren't supported", rerun `codex models refresh` after updating
+  `models_cmd.rs` and confirm `input_modalities` contains `image`.
+- Inline images need the owned/fullscreen transcript. If
+  `tui.fullscreen_transcript = false` or `raw_output_mode = true`, history lives
+  in terminal scrollback and Codex cannot map a marker row to the image.
 - Harness² editor sessions are agentic `codex exec` children. They need the same
   provider, catalog, and `CODEX_HOME` as the parent; do not run them with
   `--ignore-user-config`.

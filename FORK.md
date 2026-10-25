@@ -88,6 +88,27 @@ Rules that keep merges cheap:
      Mermaid, and raw reasoning blocks, and sets `tui.pet = "disabled"`.
    - `codex models refresh` already discovers the local model and its 1M context
      window; no second launcher is required.
+9. **Local multi-agent compatibility**
+   - The generated catalog leaves `multi_agent_version` unset, so the default
+     `multi_agent` feature selects mature V1 subagents. V2 remains opt-in with
+     `features.multi_agent_v2` (or a catalog value of `v2`).
+   - Non-OpenAI providers rewrite `ResponseItem::AgentMessage` into an assistant
+     `output_text` message. V2 uses that provider-native item for child results;
+     vLLM validates the public schema and otherwise rejects the next request
+     with hundreds of `agent_message` validation errors.
+   - The local catalog advertises `text` and `image` input, so `view_image` and
+     `-i/--image` work against a multimodal endpoint.
+10. **Inline terminal graphics**
+   - `view_image` history cells reserve rows and render the actual image with
+     `ratatui-image`: Kitty graphics with Unicode placeholders, Sixel, or
+     halfblocks fallback.
+   - Images participate in ratatui diffing and scrollback instead of being
+     painted once at a fixed cursor position. They require the owned/fullscreen
+     transcript (the default); raw scrollback mode has no visible buffer to map.
+   - Controlled by `tui.rendering.inline_images` (default `true`).
+   - Markdown itself remains ANSI text. Kitty OSC 66 text sizing (for 2x H1
+     headings) is not part of Codex's ratatui renderer yet; adding it requires a
+     text-sizing layer that accounts for the doubled cell width in layout.
 
 Build/check while iterating:
 
@@ -97,6 +118,8 @@ cargo build -p codex-cli --bin codex
 cargo test -p codex-model-provider-info
 cargo test -p codex-harness2
 cargo test -p codex-exec --lib reasoning_without_a_summary_emits_raw_content
+cargo test -p codex-core --lib localize_agent_messages
+cargo test -p codex-tui --lib graphics::tests
 ```
 
 ## Install into `~/.codex`
